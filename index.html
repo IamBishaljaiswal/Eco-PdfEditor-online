@@ -51,9 +51,11 @@
         .draggable-text {
             border: 1px dashed transparent;
             padding: 2px;
-            white-space: pre;
+            white-space: pre-wrap; /* Allows line breaks */
             min-width: 20px;
             min-height: 20px;
+            word-wrap: break-word; /* Breaks long words */
+            font-size: 16px; /* Default font size */
         }
         .draggable-signature {
             border: 1px dashed transparent;
@@ -208,6 +210,76 @@
             background-color: #d1e2ff;
             color: #1e40af;
         }
+
+        /* New styles for the Text Input Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .modal-header h3 {
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+        .modal-header button {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        #signatureModalTabs {
+            display: flex;
+            margin-bottom: 1rem;
+        }
+        .tab-button {
+            flex: 1;
+            padding: 0.75rem;
+            text-align: center;
+            border: 1px solid #d1d5db;
+            border-bottom: none;
+            border-radius: 0.5rem 0.5rem 0 0;
+            background-color: #f9fafb;
+            cursor: pointer;
+            font-weight: 600;
+            color: #4b5563;
+        }
+        .tab-button.active {
+            background-color: #fff;
+            border-bottom: 1px solid #fff;
+            color: #1f2937;
+        }
+        #signatureCanvas {
+            background-color: #fff;
+        }
     </style>
 </head>
 <body class="bg-gray-100 flex flex-col h-screen overflow-hidden">
@@ -226,19 +298,15 @@
         <!-- Main Nav Buttons -->
         <div class="flex-grow flex justify-end items-center space-x-2 nav-buttons">
             <!-- Desktop Sidebar Toggle Button -->
-            
-                
+            <button id="collapseSidebarBtn" class="p-2 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors hidden lg:block" title="Toggle Sidebar">
+                <svg id="collapseIcon" class="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
                 <svg id="expandIcon" class="w-6 h-6 text-gray-800 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                 </svg>
             </button>
-
-            <!-- Upload Signature Icon Button -->
-            <input type="file" id="signatureFile" accept="image/*" class="hidden">
-            <label for="signatureFile" class="p-2 cursor-pointer text-gray-800 hover:bg-gray-200 rounded-full transition duration-300" title="Upload Signature">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-            </label>
-
+            
             <!-- Watermark Icon and Controls -->
             <div class="relative group">
                 <button id="watermarkToggleBtn" class="p-2 text-gray-800 hover:bg-gray-200 rounded-full transition duration-300" title="Add Watermark">
@@ -261,8 +329,12 @@
             
             <!-- Tools Dropdown -->
             <div class="relative inline-block text-left">
+                <!-- New PDF Tools Icon -->
                 <button id="toolsDropdownBtn" class="p-2 text-gray-800 hover:bg-gray-200 rounded-full transition duration-300" title="Add Tools">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9-3a9 9 0 1118 0a9 9 0 01-18 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
                 </button>
                 <div id="toolsDropdownMenu" class="dropdown-menu hidden">
                     <button id="addSignatureBtn" class="tool-button">Add Signature</button>
@@ -290,13 +362,14 @@
     <div class="flex flex-1 overflow-hidden">
         <!-- Sidebar for all controls -->
         <div id="sidebar" class="sidebar flex flex-col p-8 overflow-y-auto">
-            <h1 class="text-2xl font-bold text-gray-900 mb-2 text-center">Signature</h1>
-            
+            <h1 class="text-2xl font-bold text-gray-900 mb-2 text-center">Controls</h1>
+            <p class="text-gray-600 text-center mb-6">Manage your PDF and tools here.</p>
             
             <!-- Signature Preview -->
-            <div id="signaturePreviewContainer" class="hidden flex flex-col items-center mb-8 bg-gray-50 rounded-lg shadow-inner p-4">
+            <div id="signaturePreviewContainer" class="flex flex-col items-center mb-8 bg-gray-50 rounded-lg shadow-inner p-4">
                 <h3 class="text-xl font-semibold mb-4 text-gray-800">Your Signature</h3>
-                <img id="signaturePreview" class="w-full max-h-32 object-contain" alt="Signature Preview"/>
+                <img id="signaturePreview" class="w-full max-h-32 object-contain cursor-grab" draggable="true" alt="Signature Preview"/>
+                <p id="signaturePlaceholder" class="text-gray-400 mt-2 text-sm text-center">No signature found. Click "Add Signature" to get started!</p>
             </div>
 
             <!-- Mini PDF Viewer -->
@@ -345,6 +418,50 @@
         </div>
     </div>
 
+    <!-- Text Input Modal -->
+    <div id="textInputModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Text to PDF</h3>
+                <button id="textModalCloseBtn">&times;</button>
+            </div>
+            <textarea id="textInput" placeholder="Type your text here..." class="w-full h-24 p-2 border border-gray-300 rounded-md resize-y"></textarea>
+            <div class="modal-footer">
+                <button id="textModalCancelBtn" class="bg-gray-300 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-400">Cancel</button>
+                <button id="textModalAddBtn" class="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700">Add</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Signature Modal -->
+    <div id="signatureModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="text-xl font-bold">Add Signature</h3>
+                <button id="signatureModalCloseBtn" class="p-1">&times;</button>
+            </div>
+            <div id="signatureModalTabs">
+                <button id="drawSignatureTab" class="tab-button active">Draw Signature</button>
+                <button id="uploadSignatureTab" class="tab-button">Upload Signature</button>
+            </div>
+
+            <!-- Draw Signature Section -->
+            <div id="drawSignatureSection" class="signature-tab-content">
+                <canvas id="signatureCanvas" class="w-full h-48 border border-gray-300 rounded-md mb-2"></canvas>
+                <button id="clearSignatureBtn" class="bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-md hover:bg-gray-400 w-full mb-4">Clear</button>
+                <button id="drawSignatureDoneBtn" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-700 transition duration-300 w-full">Done</button>
+            </div>
+
+            <!-- Upload Signature Section -->
+            <div id="uploadSignatureSection" class="signature-tab-content hidden">
+                <input type="file" id="signatureFile" accept="image/*" class="w-full p-2 mb-4 border border-gray-300 rounded-md">
+                <img id="uploadSignaturePreview" src="" alt="Uploaded Signature Preview" class="w-full max-h-48 object-contain my-4 border border-gray-200 rounded-md hidden">
+                <p id="uploadPlaceholder" class="text-gray-400 text-center text-sm">Preview will appear here after upload.</p>
+                <button id="uploadSignatureDoneBtn" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-700 transition duration-300 w-full">Done</button>
+            </div>
+        </div>
+    </div>
+
     <!-- PDF.js and PDF-LIB.js Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
@@ -356,7 +473,6 @@
         // Get DOM elements
         const pdfFileEl = document.getElementById('pdfFile');
         const pdfPagesEl = document.getElementById('pdf-pages');
-        const signatureFileEl = document.getElementById('signatureFile');
         const downloadPdfBtn = document.getElementById('downloadPdf');
         const saveToCloudBtn = document.getElementById('saveToCloudBtn');
         const messageBox = document.getElementById('messageBox');
@@ -386,9 +502,31 @@
 
         const miniPdfViewerEl = document.getElementById('miniPdfViewer');
 
-        // Signature preview elements
-        const signaturePreviewContainer = document.getElementById('signaturePreviewContainer');
+        // Signature modal elements
+        const signatureModal = document.getElementById('signatureModal');
+        const signatureModalCloseBtn = document.getElementById('signatureModalCloseBtn');
+        const drawSignatureTab = document.getElementById('drawSignatureTab');
+        const uploadSignatureTab = document.getElementById('uploadSignatureTab');
+        const drawSignatureSection = document.getElementById('drawSignatureSection');
+        const uploadSignatureSection = document.getElementById('uploadSignatureSection');
+        const signatureCanvas = document.getElementById('signatureCanvas');
+        const clearSignatureBtn = document.getElementById('clearSignatureBtn');
+        const drawSignatureDoneBtn = document.getElementById('drawSignatureDoneBtn');
+        const signatureFile = document.getElementById('signatureFile');
+        const uploadSignaturePreview = document.getElementById('uploadSignaturePreview');
+        const uploadSignatureDoneBtn = document.getElementById('uploadSignatureDoneBtn');
+        const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+
+        // Sidebar signature preview elements
         const signaturePreview = document.getElementById('signaturePreview');
+        const signaturePlaceholder = document.getElementById('signaturePlaceholder');
+
+        // Text input modal elements
+        const textInputModal = document.getElementById('textInputModal');
+        const textInput = document.getElementById('textInput');
+        const textModalCloseBtn = document.getElementById('textModalCloseBtn');
+        const textModalCancelBtn = document.getElementById('textModalCancelBtn');
+        const textModalAddBtn = document.getElementById('textModalAddBtn');
 
         // Authentication-related elements
         const loginBtn = document.getElementById('loginBtn');
@@ -411,6 +549,15 @@
         let activeTool = null; // Can be 'signature', 'text', 'date', 'checkbox'
         let isAuthenticated = false;
         let authMode = 'signup'; // 'signup' or 'login'
+        let currentClickCoords = { x: 0, y: 0, pageIndex: 0 };
+        let currentUploadedSignatureUrl = null;
+
+        // Signature drawing state
+        let isDrawing = false;
+        let ctx = signatureCanvas.getContext('2d');
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#000';
         
         // --- Authentication Logic ---
         function updateAuthUI() {
@@ -625,33 +772,6 @@
             }
         });
 
-        // --- Signature Upload Logic ---
-        signatureFileEl.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = async (event) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const tempCanvas = document.createElement('canvas');
-                        const ctx = tempCanvas.getContext('2d');
-                        tempCanvas.width = img.width;
-                        tempCanvas.height = img.height;
-                        ctx.drawImage(img, 0, 0);
-                        signatureDataUrl = tempCanvas.toDataURL();
-                        
-                        // Update the signature preview in the sidebar
-                        signaturePreview.src = signatureDataUrl;
-                        signaturePreviewContainer.classList.remove('hidden');
-
-                        showMessage('Signature uploaded!', 'success');
-                    };
-                    img.src = event.target.result;
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-
         // --- PDF Logic ---
         async function renderPdf(pdfBytes) {
             try {
@@ -683,6 +803,17 @@
                     
                     pages.push({ canvas: canvasEl, overlay: overlay, width: viewport.width, height: viewport.height, pageIndex: i - 1, pdfPage: page });
                     overlay.addEventListener('click', (e) => handleOverlayClick(e, pages[i - 1]));
+                    
+                    // Add drag and drop listeners to the overlay
+                    overlay.addEventListener('dragover', (e) => {
+                        e.preventDefault(); // This is crucial to allow the drop
+                        overlay.style.outline = '2px dashed #3b82f6';
+                    });
+                    overlay.addEventListener('dragleave', () => {
+                        overlay.style.outline = 'none';
+                    });
+                    overlay.addEventListener('drop', (e) => handleDrop(e, pages[i-1]));
+
 
                     // Render to mini viewer
                     const miniCanvas = document.createElement('canvas');
@@ -695,7 +826,7 @@
                     miniPdfViewerEl.appendChild(miniCanvas);
                 }
                 updateAuthUI(); // Update UI to show download/save buttons if signed in
-                showMessage('PDF loaded. Select a tool and click on a page to add content!', 'success');
+                showMessage('PDF loaded. Select a tool or drag your signature to add content!', 'success');
 
             } catch (error) {
                 console.error("Error rendering PDF:", error);
@@ -715,7 +846,7 @@
         });
 
         // --- Drag & Resize Logic ---
-        function makeDraggable(element) {
+        function makeDraggable(element, disableSave = false) {
             let isDragging = false;
             let currentX, currentY, initialX, initialY, xOffset = 0, yOffset = 0;
             element.addEventListener('mousedown', dragStart);
@@ -736,6 +867,8 @@
                 }
             }
             function dragEnd(e) {
+                if (isDragging && !disableSave) {
+                }
                 isDragging = false;
             }
             function drag(e) {
@@ -754,6 +887,7 @@
             }
 
             // Add a delete button to the element
+            // This is the core functionality requested by the user.
             const deleteBtn = document.createElement('div');
             deleteBtn.className = 'delete-button';
             deleteBtn.textContent = '✕';
@@ -812,10 +946,9 @@
         
         addSignatureBtn.addEventListener('click', () => {
             if (!pdfLibDoc) { showMessage('Please upload a PDF first.', 'error'); return; }
-            if (!signatureDataUrl) { showMessage('Please upload a signature image first using the icon in the header.', 'error'); return; }
             setActiveTool('signature');
-            showMessage('Signature tool selected. Click on a page to place it.');
             toolsDropdownMenu.classList.add('hidden');
+            signatureModal.classList.remove('hidden');
         });
         
         addTextBtn.addEventListener('click', () => {
@@ -839,16 +972,206 @@
             toolsDropdownMenu.classList.add('hidden');
         });
 
+        // --- Signature Modal Logic ---
+        signatureModalCloseBtn.addEventListener('click', () => {
+            signatureModal.classList.add('hidden');
+        });
+
+        drawSignatureTab.addEventListener('click', () => {
+            drawSignatureTab.classList.add('active');
+            uploadSignatureTab.classList.remove('active');
+            drawSignatureSection.classList.remove('hidden');
+            uploadSignatureSection.classList.add('hidden');
+        });
+
+        uploadSignatureTab.addEventListener('click', () => {
+            uploadSignatureTab.classList.add('active');
+            drawSignatureTab.classList.remove('active');
+            uploadSignatureSection.classList.remove('hidden');
+            drawSignatureSection.classList.add('hidden');
+        });
+        
+        // Drawing functionality
+        signatureCanvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            ctx.beginPath();
+            ctx.moveTo(e.offsetX, e.offsetY);
+        });
+        signatureCanvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+        });
+        signatureCanvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+        });
+        signatureCanvas.addEventListener('mouseout', () => {
+            isDrawing = false;
+        });
+
+        // Touch drawing functionality
+        signatureCanvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = signatureCanvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            isDrawing = true;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        });
+        signatureCanvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!isDrawing) return;
+            const touch = e.touches[0];
+            const rect = signatureCanvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            ctx.lineTo(x, y);
+            ctx.stroke();
+        });
+        signatureCanvas.addEventListener('touchend', () => {
+            isDrawing = false;
+        });
+
+        clearSignatureBtn.addEventListener('click', () => {
+            ctx.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+        });
+
+        drawSignatureDoneBtn.addEventListener('click', () => {
+            const isEmpty = signatureCanvas.getContext('2d').getImageData(0, 0, signatureCanvas.width, signatureCanvas.height).data.every(pixel => pixel === 0);
+            if (isEmpty) {
+                showMessage('Please draw a signature first.', 'warn');
+                return;
+            }
+            signatureDataUrl = signatureCanvas.toDataURL();
+            signaturePreview.src = signatureDataUrl;
+            signaturePlaceholder.classList.add('hidden');
+            signatureModal.classList.add('hidden');
+            showMessage('Signature saved! You can now drag and drop it onto the PDF.', 'success');
+        });
+
+        // Upload functionality
+        signatureFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    currentUploadedSignatureUrl = event.target.result;
+                    uploadSignaturePreview.src = currentUploadedSignatureUrl;
+                    uploadSignaturePreview.classList.remove('hidden');
+                    uploadPlaceholder.classList.add('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        uploadSignatureDoneBtn.addEventListener('click', () => {
+            if (!currentUploadedSignatureUrl) {
+                showMessage('Please upload a signature file first.', 'warn');
+                return;
+            }
+            signatureDataUrl = currentUploadedSignatureUrl;
+            signaturePreview.src = signatureDataUrl;
+            signaturePlaceholder.classList.add('hidden');
+            signatureModal.classList.add('hidden');
+            showMessage('Signature saved! You can now drag and drop it onto the PDF.', 'success');
+        });
+
+        // --- Drag and Drop for Signature ---
+        signaturePreview.addEventListener('dragstart', (e) => {
+            if (signatureDataUrl) {
+                e.dataTransfer.setData('text/plain', 'signature');
+            } else {
+                e.preventDefault();
+                showMessage('Please add a signature first.', 'error');
+            }
+        });
+
+        function handleDrop(e, pageInfo) {
+            e.preventDefault();
+            pageInfo.overlay.style.outline = 'none'; // Remove outline on drop
+            
+            const dropData = e.dataTransfer.getData('text/plain');
+            if (dropData !== 'signature') return;
+            
+            if (!pdfLibDoc || !signatureDataUrl) {
+                showMessage('Please upload a PDF and a signature first.', 'error');
+                return;
+            }
+
+            const rect = pageInfo.overlay.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const newElement = document.createElement('div');
+            newElement.className = 'draggable-element draggable-signature';
+            newElement.style.backgroundImage = `url(${signatureDataUrl})`;
+            newElement.style.width = '100px';
+            newElement.style.height = '50px';
+            newElement.style.left = `${x}px`;
+            newElement.style.top = `${y}px`;
+            
+            makeDraggable(newElement);
+            makeResizable(newElement);
+            pageInfo.overlay.appendChild(newElement);
+            showMessage('Signature added!', 'success');
+        }
+
+        // --- Text Input Modal Logic ---
+        textInputModal.addEventListener('click', (e) => {
+            if (e.target === textInputModal) {
+                textInputModal.classList.add('hidden');
+            }
+        });
+        textModalCloseBtn.addEventListener('click', () => {
+            textInputModal.classList.add('hidden');
+        });
+        textModalCancelBtn.addEventListener('click', () => {
+            textInputModal.classList.add('hidden');
+        });
+        textModalAddBtn.addEventListener('click', () => {
+            const textContent = textInput.value;
+            if (textContent.trim() === '') {
+                showMessage('Text field cannot be empty.', 'warn');
+                return;
+            }
+            textInputModal.classList.add('hidden');
+            addTextElement(textContent, currentClickCoords.pageIndex, currentClickCoords.x, currentClickCoords.y);
+        });
+
+        function addTextElement(textContent, pageIndex, x, y) {
+            const newElement = document.createElement('div');
+            newElement.className = 'draggable-element draggable-text';
+            newElement.textContent = textContent;
+            newElement.style.left = `${x}px`;
+            newElement.style.top = `${y}px`;
+            makeDraggable(newElement);
+            makeResizable(newElement);
+            pages[pageIndex].overlay.appendChild(newElement);
+        }
+
         function handleOverlayClick(e, pageInfo) {
             if (e.target.classList.contains('draggable-element') || e.target.classList.contains('resizer') || e.target.classList.contains('delete-button')) { return; }
             if (!activeTool) { showMessage('Please select a tool first.', 'error'); return; }
             
             const clickX = e.clientX - pageInfo.overlay.getBoundingClientRect().left;
             const clickY = e.clientY - pageInfo.overlay.getBoundingClientRect().top;
+            
+            if (activeTool === 'text') {
+                currentClickCoords.x = clickX;
+                currentClickCoords.y = clickY;
+                currentClickCoords.pageIndex = pageInfo.pageIndex;
+                textInput.value = ''; // Clear previous text
+                textInputModal.classList.remove('hidden');
+                return;
+            }
 
             let newElement;
             switch (activeTool) {
                 case 'signature':
+                    // User is now instructed to drag and drop. This case is kept for older devices/less intuitive users.
+                    if (!signatureDataUrl) { showMessage('Please add a signature first.', 'error'); return; }
                     newElement = document.createElement('div');
                     newElement.className = 'draggable-element draggable-signature';
                     newElement.style.backgroundImage = `url(${signatureDataUrl})`;
@@ -856,28 +1179,21 @@
                     newElement.style.height = '50px';
                     makeResizable(newElement);
                     break;
-                case 'text':
-                    const textContent = prompt("Enter text to add:");
-                    if (textContent === null) { return; }
-                    newElement = document.createElement('div');
-                    newElement.className = 'draggable-element draggable-text';
-                    newElement.textContent = textContent;
-                    newElement.style.fontSize = '12px';
-                    break;
                 case 'date':
                     const today = new Date().toLocaleDateString();
                     newElement = document.createElement('div');
                     newElement.className = 'draggable-element draggable-text';
                     newElement.textContent = today;
                     newElement.style.fontSize = '12px';
+                    makeResizable(newElement);
                     break;
                 case 'checkbox':
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
                     newElement = document.createElement('div');
                     newElement.className = 'draggable-element';
                     newElement.style.width = '20px';
                     newElement.style.height = '20px';
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
                     newElement.appendChild(checkbox);
                     break;
             }
@@ -912,7 +1228,7 @@
                         const elementHeight = element.offsetHeight;
                         
                         const pdfX = (x / pageInfo.overlay.offsetWidth) * page.getWidth();
-                        const pdfY = page.getHeight() - (y / pageInfo.overlay.offsetHeight) * page.getHeight() - elementHeight;
+                        const pdfY = page.getHeight() - ((y + elementHeight) / pageInfo.overlay.offsetHeight) * page.getHeight();
 
                         if (element.classList.contains('draggable-signature')) {
                             let signatureImage = null;
@@ -936,7 +1252,7 @@
                             page.drawText(text, {
                                 x: pdfX,
                                 y: pdfY,
-                                size: 12,
+                                size: parseFloat(style.fontSize),
                                 font: await newPdfDoc.embedFont(PDFLib.StandardFonts.Helvetica),
                             });
                         } else {
