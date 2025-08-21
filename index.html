@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online PDF Editor</title>
+    <!-- Inter font for clean typography -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        canvas {
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background-color: #fff;
+        }
+        #signatureCanvas {
+            border: 2px dashed #d1d5db;
+        }
+        .message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+        }
+        .pdf-page-container {
+            position: relative;
+            width: 100%;
+            display: inline-block;
+        }
+        .pdf-page-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .draggable-element {
+            position: absolute;
+            cursor: move;
+            user-select: none;
+        }
+        .draggable-element:hover {
+            outline: 2px dashed rgba(59, 130, 246, 0.5);
+        }
+        .draggable-text {
+            border: 1px dashed transparent;
+            padding: 2px;
+            white-space: pre;
+            min-width: 20px;
+            min-height: 20px;
+        }
+        .draggable-signature {
+            border: 1px dashed transparent;
+            background-repeat: no-repeat;
+            background-size: contain;
+            background-position: center;
+        }
+        .resizer {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #3b82f6;
+            border: 1px solid white;
+            border-radius: 50%;
+            z-index: 1;
+        }
+        .resizer.bottom-right {
+            bottom: -5px;
+            right: -5px;
+            cursor: nwse-resize;
+        }
+        /* Sidebar styles */
+        .sidebar {
+            width: 320px;
+            min-width: 320px;
+            background-color: #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease-in-out;
+            transform: translateX(0);
+            z-index: 50;
+            height: calc(100vh - 64px); /* Full height minus navbar */
+            top: 64px;
+        }
+        .sidebar.hidden {
+            transform: translateX(-100%);
+        }
+        .main-content {
+            flex-grow: 1;
+            padding: 2rem;
+            transition: margin-left 0.3s ease-in-out;
+            z-index: 10;
+        }
+        /* Menu button styles */
+        .menu-btn {
+            position: fixed;
+            top: 1.5rem;
+            left: 1.5rem;
+            z-index: 60;
+            transition: transform 0.3s ease-in-out;
+        }
+        .menu-btn.shifted {
+            transform: translateX(290px);
+        }
+        /* Modal styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col h-screen overflow-hidden">
+
+    <!-- Navigation Bar -->
+    <nav class="bg-white shadow-lg p-4 flex justify-between items-center z-50">
+        <div class="flex items-center">
+            <!-- Menu Button to toggle sidebar -->
+            <button id="menuToggle" class="mr-4 p-2 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors">
+                <svg id="menuIcon" class="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                <svg id="closeIcon" class="w-6 h-6 text-gray-800 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <span class="text-xl font-bold text-gray-900">PDF Editor</span>
+        </div>
+        <div>
+            <span id="userStatus" class="text-gray-600 mr-4 hidden">Signed in as: <span id="userEmail">Guest</span></span>
+            <button id="authBtn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-md hover:bg-blue-700 transition duration-300">
+                Sign Up
+            </button>
+        </div>
+    </nav>
+    
+    <!-- Main content area wrapper -->
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Sidebar for all controls -->
+        <div id="sidebar" class="sidebar flex flex-col p-8 overflow-y-auto">
+            <h1 class="text-2xl font-bold text-gray-900 mb-2 text-center">Controls</h1>
+            <p class="text-gray-600 text-center mb-6">Manage your PDF and tools here.</p>
+
+            <!-- Main controls and file upload section -->
+            <div class="flex flex-col items-center justify-center space-y-4 mb-8">
+                <input type="file" id="pdfFile" accept=".pdf" class="hidden">
+                <label for="pdfFile" class="cursor-pointer bg-blue-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-700 transition duration-300 transform hover:scale-105 w-full text-center">
+                    Upload PDF
+                </label>
+                <button id="clearSignature" class="bg-red-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-red-600 transition duration-300 transform hover:scale-105 w-full">
+                    Clear Signature
+                </button>
+                <button id="downloadPdf" class="bg-green-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-green-700 transition duration-300 transform hover:scale-105 w-full hidden">
+                    Download PDF
+                </button>
+                <button id="saveToCloudBtn" class="bg-purple-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-purple-700 transition duration-300 transform hover:scale-105 w-full hidden">
+                    Save to Cloud
+                </button>
+            </div>
+    
+            <!-- Signature Pad and Upload area -->
+            <div class="space-y-6 mb-8">
+                <div class="flex flex-col items-center p-6 bg-gray-50 rounded-lg shadow-inner">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800">Draw Your Signature</h3>
+                    <canvas id="signatureCanvas" class="w-full h-48 bg-white rounded-lg cursor-crosshair"></canvas>
+                </div>
+                <div class="flex flex-col items-center p-6 bg-gray-50 rounded-lg shadow-inner">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800">Or Upload Signature Image</h3>
+                    <input type="file" id="signatureFile" accept="image/*" class="w-full p-2 border border-gray-300 rounded-md">
+                </div>
+            </div>
+
+            <!-- Watermark Section -->
+            <div class="space-y-4 mb-8">
+                <h3 class="text-xl font-semibold text-gray-800 text-center">Add Watermark</h3>
+                <input type="text" id="watermarkText" placeholder="Enter watermark text..." class="w-full p-2 border border-gray-300 rounded-md">
+                <div class="flex items-center justify-between">
+                    <label for="watermarkOpacity" class="text-gray-700">Opacity:</label>
+                    <input type="range" id="watermarkOpacity" min="0" max="1" step="0.05" value="0.2" class="w-3/4">
+                </div>
+                <button id="addWatermarkBtn" class="bg-gray-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-gray-600 transition duration-300 transform hover:scale-105 w-full">
+                    Add Watermark
+                </button>
+            </div>
+
+            <!-- Interactive Tools Section -->
+            <div class="flex flex-col space-y-4">
+                <h3 class="text-xl font-semibold text-gray-800 text-center">Editing Tools</h3>
+                <button id="addSignatureBtn" class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-600 transition duration-300 transform hover:scale-105">
+                    Add Signature
+                </button>
+                <button id="addTextBtn" class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-600 transition duration-300 transform hover:scale-105">
+                    Add Text
+                </button>
+                <button id="addDateBtn" class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-600 transition duration-300 transform hover:scale-105">
+                    Add Date
+                </button>
+                <button id="addCheckboxBtn" class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-600 transition duration-300 transform hover:scale-105">
+                    Add Checkbox
+                </button>
+            </div>
+        </div>
+    
+        <!-- Main Content Area for PDF Viewer -->
+        <div class="main-content flex flex-col items-center py-10 px-4 overflow-y-auto">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6 text-center">PDF Viewer</h2>
+            <div id="pdf-pages" class="w-full max-w-4xl bg-white rounded-xl shadow-2xl p-8 space-y-8">
+                <!-- PDF pages will be rendered here dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Message Box for user feedback -->
+    <div id="messageBox" class="message-box hidden p-4 rounded-lg text-white font-bold bg-blue-500 shadow-xl transform transition-all duration-300 ease-out scale-95 opacity-0">
+        <!-- Message content goes here -->
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="authModal" class="modal-overlay hidden">
+        <div class="bg-white rounded-lg p-8 shadow-2xl w-full max-w-md">
+            <h3 class="text-2xl font-bold mb-4 text-center">Sign Up for Free</h3>
+            <p class="text-center text-gray-600 mb-6">Create an account to download and save your documents.</p>
+            <div class="space-y-4">
+                <input type="text" id="authEmail" class="w-full p-3 border border-gray-300 rounded-md" placeholder="Enter your email">
+                <input type="password" id="authPassword" class="w-full p-3 border border-gray-300 rounded-md" placeholder="Enter your password">
+                <button id="authModalBtn" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-700 transition duration-300 w-full">
+                    Sign Up
+                </button>
+            </div>
+            <p id="authMessage" class="mt-4 text-sm text-red-500 text-center"></p>
+        </div>
+    </div>
+
+    <!-- PDF.js and PDF-LIB.js Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+
+    <script>
+        // Set the worker source for PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.worker.min.js';
+
+        // Get DOM elements
+        const pdfFileEl = document.getElementById('pdfFile');
+        const pdfPagesEl = document.getElementById('pdf-pages');
+        const signatureCanvasEl = document.getElementById('signatureCanvas');
+        const clearSignatureBtn = document.getElementById('clearSignature');
+        const signatureFileEl = document.getElementById('signatureFile');
+        const downloadPdfBtn = document.getElementById('downloadPdf');
+        const saveToCloudBtn = document.getElementById('saveToCloudBtn');
+        const messageBox = document.getElementById('messageBox');
+        
+        const watermarkTextEl = document.getElementById('watermarkText');
+        const watermarkOpacityEl = document.getElementById('watermarkOpacity');
+        const addWatermarkBtn = document.getElementById('addWatermarkBtn');
+
+        const addSignatureBtn = document.getElementById('addSignatureBtn');
+        const addTextBtn = document.getElementById('addTextBtn');
+        const addDateBtn = document.getElementById('addDateBtn');
+        const addCheckboxBtn = document.getElementById('addCheckboxBtn');
+
+        const sidebarEl = document.getElementById('sidebar');
+        const menuToggleBtn = document.getElementById('menuToggle');
+        const menuIcon = document.getElementById('menuIcon');
+        const closeIcon = document.getElementById('closeIcon');
+
+        const authBtn = document.getElementById('authBtn');
+        const userStatusEl = document.getElementById('userStatus');
+        const userEmailEl = document.getElementById('userEmail');
+        const authModal = document.getElementById('authModal');
+        const authModalBtn = document.getElementById('authModalBtn');
+        const authEmailEl = document.getElementById('authEmail');
+        const authPasswordEl = document.getElementById('authPassword');
+        const authMessageEl = document.getElementById('authMessage');
+
+        // State variables for the application
+        let pdfDoc = null; // The loaded PDF document from PDF.js
+        let pdfLibDoc = null; // The loaded PDF document from PDF-LIB.js
+        let pages = []; // Array to store page dimensions and canvases
+        let signatureDataUrl = null; // The data URL of the signature image
+        let isDrawing = false; // Flag to track drawing state
+        let activeTool = null; // Can be 'signature', 'text', 'date', 'checkbox'
+        let isSidebarHidden = false;
+        let isAuthenticated = false;
+
+        // Context for signature canvas
+        const signatureCtx = signatureCanvasEl.getContext('2d');
+        let rect = signatureCanvasEl.getBoundingClientRect();
+        signatureCanvasEl.width = rect.width;
+        signatureCanvasEl.height = rect.height;
+        
+        // --- Authentication Logic ---
+        function updateAuthUI() {
+            if (localStorage.getItem('isAuthenticated') === 'true') {
+                isAuthenticated = true;
+                const email = localStorage.getItem('userEmail');
+                authBtn.textContent = 'Logout';
+                userStatusEl.classList.remove('hidden');
+                userEmailEl.textContent = email || 'Guest';
+                downloadPdfBtn.classList.remove('hidden');
+                saveToCloudBtn.classList.remove('hidden');
+            } else {
+                isAuthenticated = false;
+                authBtn.textContent = 'Sign Up';
+                userStatusEl.classList.add('hidden');
+                downloadPdfBtn.classList.add('hidden');
+                saveToCloudBtn.classList.add('hidden');
+            }
+        }
+        
+        authBtn.addEventListener('click', () => {
+            if (isAuthenticated) {
+                // Logout
+                localStorage.removeItem('isAuthenticated');
+                localStorage.removeItem('userEmail');
+                updateAuthUI();
+                showMessage('Logged out successfully.', 'info');
+            } else {
+                // Show login/signup modal
+                authModal.classList.remove('hidden');
+            }
+        });
+
+        authModalBtn.addEventListener('click', () => {
+            const email = authEmailEl.value;
+            const password = authPasswordEl.value;
+            if (email && password.length >= 6) {
+                // Simulate signup
+                localStorage.setItem('isAuthenticated', 'true');
+                localStorage.setItem('userEmail', email);
+                updateAuthUI();
+                authModal.classList.add('hidden');
+                authEmailEl.value = '';
+                authPasswordEl.value = '';
+                showMessage('Account created and logged in!', 'success');
+            } else {
+                authMessageEl.textContent = 'Please enter a valid email and a password of at least 6 characters.';
+            }
+        });
+        
+        // Hide modal when clicking outside
+        authModal.addEventListener('click', (e) => {
+            if (e.target === authModal) {
+                authModal.classList.add('hidden');
+            }
+        });
+
+        // Initial UI update
+        updateAuthUI();
+
+        // Function to show a temporary message box
+        function showMessage(text, type = 'info') {
+            messageBox.textContent = text;
+            let bgColor = 'bg-blue-500';
+            if (type === 'success') bgColor = 'bg-green-500';
+            if (type === 'error') bgColor = 'bg-red-500';
+            if (type === 'warn') bgColor = 'bg-yellow-500';
+            messageBox.className = `message-box p-4 rounded-lg text-white font-bold shadow-xl transform transition-all duration-300 ease-out scale-100 opacity-100 ${bgColor}`;
+            messageBox.classList.remove('hidden');
+
+            setTimeout(() => {
+                messageBox.classList.remove('scale-100', 'opacity-100');
+                messageBox.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => {
+                    messageBox.classList.add('hidden');
+                }, 300);
+            }, 2000);
+        }
+
+        // --- Sidebar Logic ---
+        menuToggleBtn.addEventListener('click', () => {
+            isSidebarHidden = !isSidebarHidden;
+            sidebarEl.classList.toggle('hidden', isSidebarHidden);
+            if (isSidebarHidden) {
+                menuIcon.classList.remove('hidden');
+                closeIcon.classList.add('hidden');
+            } else {
+                menuIcon.classList.add('hidden');
+                closeIcon.classList.remove('hidden');
+            }
+        });
+
+        // --- Signature Pad Logic ---
+        function startDrawing(e) {
+            isDrawing = true;
+            signatureCtx.lineWidth = 3;
+            signatureCtx.lineCap = 'round';
+            signatureCtx.strokeStyle = 'black';
+            signatureCtx.beginPath();
+            signatureCtx.moveTo(e.offsetX, e.offsetY);
+        }
+        function draw(e) {
+            if (!isDrawing) return;
+            signatureCtx.lineTo(e.offsetX, e.offsetY);
+            signatureCtx.stroke();
+        }
+        function stopDrawing() {
+            if (!isDrawing) return;
+            isDrawing = false;
+            signatureCtx.closePath();
+            signatureDataUrl = signatureCanvasEl.toDataURL();
+            showMessage('Signature drawn!', 'success');
+        }
+        signatureCanvasEl.addEventListener('mousedown', startDrawing);
+        signatureCanvasEl.addEventListener('mousemove', draw);
+        signatureCanvasEl.addEventListener('mouseup', stopDrawing);
+        signatureCanvasEl.addEventListener('mouseout', stopDrawing);
+        signatureCanvasEl.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = signatureCanvasEl.getBoundingClientRect();
+            startDrawing({ offsetX: touch.clientX - rect.left, offsetY: touch.clientY - rect.top });
+        });
+        signatureCanvasEl.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = signatureCanvasEl.getBoundingClientRect();
+            draw({ offsetX: touch.clientX - rect.left, offsetY: touch.clientY - rect.top });
+        });
+        signatureCanvasEl.addEventListener('touchend', stopDrawing);
+        clearSignatureBtn.addEventListener('click', () => {
+            signatureCtx.clearRect(0, 0, signatureCanvasEl.width, signatureCanvasEl.height);
+            signatureDataUrl = null;
+            showMessage('Signature cleared.', 'info');
+        });
+        signatureFileEl.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        signatureCtx.clearRect(0, 0, signatureCanvasEl.width, signatureCanvasEl.height);
+                        signatureCtx.drawImage(img, 0, 0, signatureCanvasEl.width, signatureCanvasEl.height);
+                        signatureDataUrl = signatureCanvasEl.toDataURL();
+                        showMessage('Signature uploaded!', 'success');
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // --- PDF Logic ---
+        async function renderPdf(pdfBytes) {
+            try {
+                pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+                pdfLibDoc = await PDFLib.PDFDocument.load(pdfBytes);
+                pdfPagesEl.innerHTML = '';
+                pages = [];
+
+                for (let i = 1; i <= pdfDoc.numPages; i++) {
+                    const page = await pdfDoc.getPage(i);
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    const pageContainer = document.createElement('div');
+                    pageContainer.className = 'pdf-page-container';
+                    const canvasEl = document.createElement('canvas');
+                    const context = canvasEl.getContext('2d');
+                    canvasEl.height = viewport.height;
+                    canvasEl.width = viewport.width;
+                    canvasEl.className = 'w-full mb-4 shadow-md rounded-lg border-2 border-gray-200';
+                    const overlay = document.createElement('div');
+                    overlay.className = 'pdf-page-overlay';
+                    await page.render({ canvasContext: context, viewport }).promise;
+                    
+                    pageContainer.appendChild(canvasEl);
+                    pageContainer.appendChild(overlay);
+                    pdfPagesEl.appendChild(pageContainer);
+                    
+                    pages.push({ canvas: canvasEl, overlay: overlay, width: viewport.width, height: viewport.height, pageIndex: i - 1, pdfPage: page });
+                    overlay.addEventListener('click', (e) => handleOverlayClick(e, pages[i - 1]));
+                }
+                updateAuthUI(); // Update UI to show download/save buttons if signed in
+                showMessage('PDF loaded. Select a tool and click on a page to add content!', 'success');
+
+            } catch (error) {
+                console.error("Error rendering PDF:", error);
+                showMessage('Error loading PDF. Please try a different file.', 'error');
+            }
+        }
+        pdfFileEl.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    const pdfBytes = new Uint8Array(event.target.result);
+                    await renderPdf(pdfBytes);
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+
+        // --- Drag & Resize Logic ---
+        function makeDraggable(element) {
+            let isDragging = false;
+            let currentX, currentY, initialX, initialY, xOffset = 0, yOffset = 0;
+            element.addEventListener('mousedown', dragStart);
+            element.addEventListener('mouseup', dragEnd);
+            element.addEventListener('mousemove', drag);
+            element.addEventListener('touchstart', dragStart);
+            element.addEventListener('touchend', dragEnd);
+            element.addEventListener('touchmove', drag);
+            function dragStart(e) {
+                if (e.target.classList.contains('resizer')) { return; }
+                isDragging = true;
+                if (e.type === 'touchstart') {
+                    initialX = e.touches[0].clientX - xOffset;
+                    initialY = e.touches[0].clientY - yOffset;
+                } else {
+                    initialX = e.clientX - xOffset;
+                    initialY = e.clientY - yOffset;
+                }
+            }
+            function dragEnd(e) {
+                isDragging = false;
+            }
+            function drag(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                if (e.type === 'touchmove') {
+                    currentX = e.touches[0].clientX - initialX;
+                    currentY = e.touches[0].clientY - initialY;
+                } else {
+                    currentX = e.clientX - initialX;
+                    currentY = e.clientY - initialY;
+                }
+                xOffset = currentX;
+                yOffset = currentY;
+                element.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
+            }
+        }
+        function makeResizable(element) {
+            const resizer = document.createElement('div');
+            resizer.className = 'resizer bottom-right';
+            element.appendChild(resizer);
+            let initialX, initialY, initialWidth, initialHeight;
+            resizer.addEventListener('mousedown', initResize);
+            resizer.addEventListener('touchstart', initResize);
+            function initResize(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                initialX = e.clientX || e.touches[0].clientX;
+                initialY = e.clientY || e.touches[0].clientY;
+                initialWidth = element.offsetWidth;
+                initialHeight = element.offsetHeight;
+                window.addEventListener('mousemove', resize);
+                window.addEventListener('mouseup', stopResize);
+                window.addEventListener('touchmove', resize);
+                window.addEventListener('touchend', stopResize);
+            }
+            function resize(e) {
+                const currentX = e.clientX || e.touches[0].clientX;
+                const currentY = e.clientY || e.touches[0].clientY;
+                const newWidth = initialWidth + (currentX - initialX);
+                const newHeight = initialHeight + (currentY - initialY);
+                element.style.width = newWidth + 'px';
+                element.style.height = newHeight + 'px';
+            }
+            function stopResize() {
+                window.removeEventListener('mousemove', resize);
+                window.removeEventListener('mouseup', stopResize);
+                window.removeEventListener('touchmove', resize);
+                window.removeEventListener('touchend', stopResize);
+            }
+        }
+
+
+        // --- Tool Management & Placement Logic ---
+        addWatermarkBtn.addEventListener('click', async () => {
+            if (!pdfLibDoc) {
+                showMessage('Please upload a PDF first.', 'error');
+                return;
+            }
+            const watermarkText = watermarkTextEl.value;
+            if (!watermarkText) {
+                showMessage('Please enter watermark text.', 'warn');
+                return;
+            }
+            
+            showMessage('Adding watermark to PDF...', 'info');
+            const { degrees } = PDFLib;
+            const helveticaFont = await pdfLibDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+            const pagesToWatermark = pdfLibDoc.getPages();
+            const opacity = parseFloat(watermarkOpacityEl.value);
+
+            for (const page of pagesToWatermark) {
+                const { width, height } = page.getSize();
+                const textWidth = helveticaFont.widthOfTextAtSize(watermarkText, 50);
+                
+                page.drawText(watermarkText, {
+                    x: (width / 2) - (textWidth / 2),
+                    y: (height / 2),
+                    size: 50,
+                    font: helveticaFont,
+                    color: PDFLib.rgb(0.5, 0.5, 0.5),
+                    opacity: opacity,
+                    rotate: degrees(-45),
+                });
+            }
+            showMessage('Watermark added!', 'success');
+        });
+
+        addSignatureBtn.addEventListener('click', () => {
+            if (!pdfLibDoc) { showMessage('Please upload a PDF first.', 'error'); return; }
+            if (!signatureDataUrl) { showMessage('Please draw or upload a signature first.', 'error'); return; }
+            activeTool = 'signature';
+            showMessage('Signature tool selected. Click on a page to place it.');
+        });
+        
+        addTextBtn.addEventListener('click', () => {
+            if (!pdfLibDoc) { showMessage('Please upload a PDF first.', 'error'); return; }
+            activeTool = 'text';
+            showMessage('Text tool selected. Click on a page to add text.');
+        });
+        
+        addDateBtn.addEventListener('click', () => {
+            if (!pdfLibDoc) { showMessage('Please upload a PDF first.', 'error'); return; }
+            activeTool = 'date';
+            showMessage('Date tool selected. Click on a page to add the date.');
+        });
+
+        addCheckboxBtn.addEventListener('click', () => {
+            if (!pdfLibDoc) { showMessage('Please upload a PDF first.', 'error'); return; }
+            activeTool = 'checkbox';
+            showMessage('Checkbox tool selected. Click on a page to add a checkbox.');
+        });
+
+        function handleOverlayClick(e, pageInfo) {
+            if (e.target.classList.contains('draggable-element') || e.target.classList.contains('resizer')) { return; }
+            if (!activeTool) { showMessage('Please select a tool first.', 'error'); return; }
+            
+            const clickX = e.clientX - pageInfo.overlay.getBoundingClientRect().left;
+            const clickY = e.clientY - pageInfo.overlay.getBoundingClientRect().top;
+
+            let newElement;
+            switch (activeTool) {
+                case 'signature':
+                    newElement = document.createElement('div');
+                    newElement.className = 'draggable-element draggable-signature';
+                    newElement.style.backgroundImage = `url(${signatureDataUrl})`;
+                    newElement.style.width = '100px';
+                    newElement.style.height = '50px';
+                    makeResizable(newElement);
+                    break;
+                case 'text':
+                    const textContent = prompt("Enter text to add:");
+                    if (textContent === null) { return; }
+                    newElement = document.createElement('div');
+                    newElement.className = 'draggable-element draggable-text';
+                    newElement.textContent = textContent;
+                    newElement.style.fontSize = '12px';
+                    break;
+                case 'date':
+                    const today = new Date().toLocaleDateString();
+                    newElement = document.createElement('div');
+                    newElement.className = 'draggable-element draggable-text';
+                    newElement.textContent = today;
+                    newElement.style.fontSize = '12px';
+                    break;
+                case 'checkbox':
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    newElement = document.createElement('div');
+                    newElement.className = 'draggable-element';
+                    newElement.style.width = '20px';
+                    newElement.style.height = '20px';
+                    newElement.appendChild(checkbox);
+                    break;
+            }
+
+            if (newElement) {
+                newElement.style.left = `${clickX}px`;
+                newElement.style.top = `${clickY}px`;
+                makeDraggable(newElement);
+                pageInfo.overlay.appendChild(newElement);
+            }
+        }
+
+        // --- Final PDF Generation and Download/Upload ---
+        async function generatePdf() {
+            if (!pdfLibDoc) { showMessage('No PDF loaded to generate.', 'error'); return null; }
+            try {
+                const newPdfDoc = await PDFLib.PDFDocument.create();
+                const pagesToCopy = pdfLibDoc.getPages();
+
+                for (let i = 0; i < pagesToCopy.length; i++) {
+                    const pageInfo = pages[i];
+                    const page = newPdfDoc.addPage(pagesToCopy[i].getMediaBox());
+                    
+                    const elements = pageInfo.overlay.querySelectorAll('.draggable-element');
+                    for (const element of elements) {
+                        const style = window.getComputedStyle(element);
+                        const transform = style.transform;
+                        const matrix = new DOMMatrixReadOnly(transform);
+                        const x = element.offsetLeft + matrix.m41;
+                        const y = element.offsetTop + matrix.m42;
+                        const elementWidth = element.offsetWidth;
+                        const elementHeight = element.offsetHeight;
+                        
+                        const pdfX = (x / pageInfo.overlay.offsetWidth) * page.getWidth();
+                        const pdfY = page.getHeight() - (y / pageInfo.overlay.offsetHeight) * page.getHeight() - elementHeight;
+
+                        if (element.classList.contains('draggable-signature')) {
+                            let signatureImage = null;
+                            const bgImage = style.backgroundImage.slice(5, -2);
+                            if (bgImage.startsWith('data:image/jpeg')) {
+                                signatureImage = await newPdfDoc.embedJpg(bgImage);
+                            } else if (bgImage.startsWith('data:image/png')) {
+                                signatureImage = await newPdfDoc.embedPng(bgImage);
+                            }
+
+                            if (signatureImage) {
+                                page.drawImage(signatureImage, {
+                                    x: pdfX,
+                                    y: pdfY,
+                                    width: elementWidth,
+                                    height: elementHeight,
+                                });
+                            }
+                        } else if (element.classList.contains('draggable-text')) {
+                            const text = element.textContent;
+                            page.drawText(text, {
+                                x: pdfX,
+                                y: pdfY,
+                                size: 12,
+                                font: await newPdfDoc.embedFont(PDFLib.StandardFonts.Helvetica),
+                            });
+                        } else {
+                            const checkbox = element.querySelector('input[type="checkbox"]');
+                            if (checkbox && checkbox.checked) {
+                                page.drawRectangle({
+                                    x: pdfX,
+                                    y: pdfY,
+                                    width: elementWidth,
+                                    height: elementHeight,
+                                    borderWidth: 1,
+                                    borderColor: PDFLib.rgb(0, 0, 0),
+                                });
+                                page.drawText('✔', {
+                                    x: pdfX + 2,
+                                    y: pdfY,
+                                    size: elementWidth,
+                                    font: await newPdfDoc.embedFont(PDFLib.StandardFonts.Helvetica),
+                                });
+                            }
+                        }
+                    }
+                }
+                return await newPdfDoc.save();
+            } catch (error) {
+                console.error('Error generating PDF:', error);
+                showMessage('An error occurred during PDF generation. Please try again.', 'error');
+                return null;
+            }
+        }
+        
+        downloadPdfBtn.addEventListener('click', async () => {
+            if (!isAuthenticated) { showMessage('Please sign up to download.', 'warn'); return; }
+            showMessage('Generating PDF for download...', 'info');
+            const modifiedPdfBytes = await generatePdf();
+            if (!modifiedPdfBytes) return;
+            const modifiedPdfBlob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+            const modifiedPdfUrl = URL.createObjectURL(modifiedPdfBlob);
+            const a = document.createElement('a');
+            a.href = modifiedPdfUrl;
+            a.download = 'signed_and_edited_document.pdf';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(modifiedPdfUrl);
+            showMessage('PDF is ready for download.', 'success');
+        });
+        
+        saveToCloudBtn.addEventListener('click', async () => {
+            if (!isAuthenticated) { showMessage('Please sign up to save to the cloud.', 'warn'); return; }
+            showMessage('Generating and uploading PDF...', 'info');
+            const modifiedPdfBytes = await generatePdf();
+            if (!modifiedPdfBytes) return;
+            const modifiedPdfBlob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+            setTimeout(() => {
+                showMessage('PDF successfully uploaded!', 'success');
+                console.log('Simulated upload completed. Blob size:', modifiedPdfBlob.size, 'bytes');
+            }, 2000);
+        });
+
+    </script>
+</body>
+</html>
