@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Online PDF Editor</title>
+    <title>Eco-Pdf Editor</title>
     <!-- Inter font for clean typography -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
     <!-- Tailwind CSS for styling -->
@@ -75,6 +75,28 @@
             right: -5px;
             cursor: nwse-resize;
         }
+        .delete-button {
+            position: absolute;
+            top: 0;
+            right: 0;
+            z-index: 2;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1px;
+            color: white;
+            background-color: #ef4444;
+            border-radius: 9999px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            font-weight: bold;
+            transform: translate(50%, -50%);
+        }
+        .delete-button:hover {
+            background-color: #dc2626;
+        }
         /* Sidebar styles */
         .sidebar {
             width: 320px;
@@ -120,6 +142,53 @@
             align-items: center;
             z-index: 100;
         }
+        /* Dropdown menu styles */
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background-color: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+            z-index: 50;
+        }
+        .dropdown-menu button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            border-radius: 0.25rem;
+            transition: background-color 0.2s;
+        }
+        .dropdown-menu button:hover {
+            background-color: #f3f4f6;
+        }
+        .mini-pdf-page {
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            margin-bottom: 0.75rem;
+            border-radius: 0.25rem;
+        }
+        #miniPdfViewer {
+            height: 300px;
+            overflow-y: auto;
+        }
+        .watermark-controls {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #fff;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            z-index: 50;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body class="bg-gray-100 flex flex-col h-screen overflow-hidden">
@@ -132,13 +201,64 @@
                 <svg id="menuIcon" class="w-6 h-6 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
                 <svg id="closeIcon" class="w-6 h-6 text-gray-800 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
-            <span class="text-xl font-bold text-gray-900">PDF Editor</span>
+            <span class="text-xl font-bold text-gray-900">Eco-Pdf Editor</span>
+            
+            <!-- Upload Signature Icon Button -->
+            <input type="file" id="signatureFile" accept="image/*" class="hidden">
+            <label for="signatureFile" class="ml-4 p-2 cursor-pointer text-gray-800 hover:bg-gray-200 rounded-full transition duration-300" title="Upload Signature">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            </label>
+
+            <!-- Watermark Icon and Controls -->
+            <div class="relative group ml-4">
+                <button id="watermarkToggleBtn" class="p-2 text-gray-800 hover:bg-gray-200 rounded-full transition duration-300" title="Add Watermark">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M15 9h-4V4H9v5H5v2h4v4h2v-4h4V9z" /><path d="M12 2a10 10 0 100 20 10 10 0 000-20zM12 20a8 8 0 110-16 8 8 0 010 16z" /></svg>
+                </button>
+                <div id="watermarkControls" class="watermark-controls">
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="watermarkText" placeholder="Watermark text..." class="p-2 border border-gray-300 rounded-md w-48">
+                        <input type="range" id="watermarkOpacity" min="0" max="1" step="0.05" value="0.2" class="w-24">
+                        <button id="addWatermarkBtn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-md hover:bg-blue-700 transition duration-300">
+                            Apply
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div>
+        <div class="flex items-center space-x-4">
             <span id="userStatus" class="text-gray-600 mr-4 hidden">Signed in as: <span id="userEmail">Guest</span></span>
+            <!-- Login Button -->
+            <button id="loginBtn" class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-md shadow-md hover:bg-gray-300 transition duration-300">
+                Login
+            </button>
+            <!-- Sign Up Button, now separate from Login -->
             <button id="authBtn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md shadow-md hover:bg-blue-700 transition duration-300">
                 Sign Up
             </button>
+            
+            <!-- Upload Icon Button -->
+            <input type="file" id="pdfFile" accept=".pdf" class="hidden">
+            <label for="pdfFile" class="p-2 cursor-pointer text-gray-800 hover:bg-gray-200 rounded-full transition duration-300" title="Upload PDF">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            </label>
+
+            <!-- Download Icon Button -->
+            <button id="downloadPdf" class="p-2 text-gray-800 hover:bg-gray-200 rounded-full transition duration-300 hidden" title="Download PDF">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            </button>
+
+            <!-- Tools Dropdown -->
+            <div class="relative inline-block text-left">
+                <button id="toolsDropdownBtn" class="p-2 text-gray-800 hover:bg-gray-200 rounded-full transition duration-300" title="Add Tools">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                </button>
+                <div id="toolsDropdownMenu" class="dropdown-menu hidden">
+                    <button id="addSignatureBtn">Add Signature</button>
+                    <button id="addTextBtn">Add Text</button>
+                    <button id="addDateBtn">Add Date</button>
+                    <button id="addCheckboxBtn">Add Checkbox</button>
+                </div>
+            </div>
         </div>
     </nav>
     
@@ -148,63 +268,25 @@
         <div id="sidebar" class="sidebar flex flex-col p-8 overflow-y-auto">
             <h1 class="text-2xl font-bold text-gray-900 mb-2 text-center">Controls</h1>
             <p class="text-gray-600 text-center mb-6">Manage your PDF and tools here.</p>
+            
+            <!-- Signature Preview -->
+            <div id="signaturePreviewContainer" class="hidden flex flex-col items-center mb-8 bg-gray-50 rounded-lg shadow-inner p-4">
+                <h3 class="text-xl font-semibold mb-4 text-gray-800">Your Signature</h3>
+                <img id="signaturePreview" class="w-full max-h-32 object-contain" alt="Signature Preview"/>
+            </div>
+
+            <!-- Mini PDF Viewer -->
+            <div class="flex flex-col items-center mb-8 bg-gray-50 rounded-lg shadow-inner p-4">
+                <h3 class="text-xl font-semibold mb-4 text-gray-800">PDF Preview</h3>
+                <div id="miniPdfViewer" class="w-full">
+                    <!-- Mini PDF pages will be rendered here -->
+                </div>
+            </div>
 
             <!-- Main controls and file upload section -->
             <div class="flex flex-col items-center justify-center space-y-4 mb-8">
-                <input type="file" id="pdfFile" accept=".pdf" class="hidden">
-                <label for="pdfFile" class="cursor-pointer bg-blue-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-700 transition duration-300 transform hover:scale-105 w-full text-center">
-                    Upload PDF
-                </label>
-                <button id="clearSignature" class="bg-red-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-red-600 transition duration-300 transform hover:scale-105 w-full">
-                    Clear Signature
-                </button>
-                <button id="downloadPdf" class="bg-green-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-green-700 transition duration-300 transform hover:scale-105 w-full hidden">
-                    Download PDF
-                </button>
                 <button id="saveToCloudBtn" class="bg-purple-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-purple-700 transition duration-300 transform hover:scale-105 w-full hidden">
                     Save to Cloud
-                </button>
-            </div>
-    
-            <!-- Signature Pad and Upload area -->
-            <div class="space-y-6 mb-8">
-                <div class="flex flex-col items-center p-6 bg-gray-50 rounded-lg shadow-inner">
-                    <h3 class="text-xl font-semibold mb-4 text-gray-800">Draw Your Signature</h3>
-                    <canvas id="signatureCanvas" class="w-full h-48 bg-white rounded-lg cursor-crosshair"></canvas>
-                </div>
-                <div class="flex flex-col items-center p-6 bg-gray-50 rounded-lg shadow-inner">
-                    <h3 class="text-xl font-semibold mb-4 text-gray-800">Or Upload Signature Image</h3>
-                    <input type="file" id="signatureFile" accept="image/*" class="w-full p-2 border border-gray-300 rounded-md">
-                </div>
-            </div>
-
-            <!-- Watermark Section -->
-            <div class="space-y-4 mb-8">
-                <h3 class="text-xl font-semibold text-gray-800 text-center">Add Watermark</h3>
-                <input type="text" id="watermarkText" placeholder="Enter watermark text..." class="w-full p-2 border border-gray-300 rounded-md">
-                <div class="flex items-center justify-between">
-                    <label for="watermarkOpacity" class="text-gray-700">Opacity:</label>
-                    <input type="range" id="watermarkOpacity" min="0" max="1" step="0.05" value="0.2" class="w-3/4">
-                </div>
-                <button id="addWatermarkBtn" class="bg-gray-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-gray-600 transition duration-300 transform hover:scale-105 w-full">
-                    Add Watermark
-                </button>
-            </div>
-
-            <!-- Interactive Tools Section -->
-            <div class="flex flex-col space-y-4">
-                <h3 class="text-xl font-semibold text-gray-800 text-center">Editing Tools</h3>
-                <button id="addSignatureBtn" class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-600 transition duration-300 transform hover:scale-105">
-                    Add Signature
-                </button>
-                <button id="addTextBtn" class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-600 transition duration-300 transform hover:scale-105">
-                    Add Text
-                </button>
-                <button id="addDateBtn" class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-600 transition duration-300 transform hover:scale-105">
-                    Add Date
-                </button>
-                <button id="addCheckboxBtn" class="bg-blue-500 text-white font-semibold py-3 px-6 rounded-full shadow-lg hover:bg-blue-600 transition duration-300 transform hover:scale-105">
-                    Add Checkbox
                 </button>
             </div>
         </div>
@@ -226,8 +308,8 @@
     <!-- Auth Modal -->
     <div id="authModal" class="modal-overlay hidden">
         <div class="bg-white rounded-lg p-8 shadow-2xl w-full max-w-md">
-            <h3 class="text-2xl font-bold mb-4 text-center">Sign Up for Free</h3>
-            <p class="text-center text-gray-600 mb-6">Create an account to download and save your documents.</p>
+            <h3 id="authModalTitle" class="text-2xl font-bold mb-4 text-center">Sign Up for Free</h3>
+            <p id="authModalText" class="text-center text-gray-600 mb-6">Create an account to download and save your documents.</p>
             <div class="space-y-4">
                 <input type="text" id="authEmail" class="w-full p-3 border border-gray-300 rounded-md" placeholder="Enter your email">
                 <input type="password" id="authPassword" class="w-full p-3 border border-gray-300 rounded-md" placeholder="Enter your password">
@@ -250,13 +332,13 @@
         // Get DOM elements
         const pdfFileEl = document.getElementById('pdfFile');
         const pdfPagesEl = document.getElementById('pdf-pages');
-        const signatureCanvasEl = document.getElementById('signatureCanvas');
-        const clearSignatureBtn = document.getElementById('clearSignature');
         const signatureFileEl = document.getElementById('signatureFile');
         const downloadPdfBtn = document.getElementById('downloadPdf');
         const saveToCloudBtn = document.getElementById('saveToCloudBtn');
         const messageBox = document.getElementById('messageBox');
         
+        const watermarkToggleBtn = document.getElementById('watermarkToggleBtn');
+        const watermarkControls = document.getElementById('watermarkControls');
         const watermarkTextEl = document.getElementById('watermarkText');
         const watermarkOpacityEl = document.getElementById('watermarkOpacity');
         const addWatermarkBtn = document.getElementById('addWatermarkBtn');
@@ -266,15 +348,28 @@
         const addDateBtn = document.getElementById('addDateBtn');
         const addCheckboxBtn = document.getElementById('addCheckboxBtn');
 
+        const toolsDropdownBtn = document.getElementById('toolsDropdownBtn');
+        const toolsDropdownMenu = document.getElementById('toolsDropdownMenu');
+
         const sidebarEl = document.getElementById('sidebar');
         const menuToggleBtn = document.getElementById('menuToggle');
         const menuIcon = document.getElementById('menuIcon');
         const closeIcon = document.getElementById('closeIcon');
+        
+        const miniPdfViewerEl = document.getElementById('miniPdfViewer');
 
-        const authBtn = document.getElementById('authBtn');
+        // Signature preview elements
+        const signaturePreviewContainer = document.getElementById('signaturePreviewContainer');
+        const signaturePreview = document.getElementById('signaturePreview');
+
+        // Authentication-related elements
+        const loginBtn = document.getElementById('loginBtn');
+        const authBtn = document.getElementById('authBtn'); // This is now the "Sign Up" button
         const userStatusEl = document.getElementById('userStatus');
         const userEmailEl = document.getElementById('userEmail');
         const authModal = document.getElementById('authModal');
+        const authModalTitle = document.getElementById('authModalTitle');
+        const authModalText = document.getElementById('authModalText');
         const authModalBtn = document.getElementById('authModalBtn');
         const authEmailEl = document.getElementById('authEmail');
         const authPasswordEl = document.getElementById('authPassword');
@@ -285,16 +380,10 @@
         let pdfLibDoc = null; // The loaded PDF document from PDF-LIB.js
         let pages = []; // Array to store page dimensions and canvases
         let signatureDataUrl = null; // The data URL of the signature image
-        let isDrawing = false; // Flag to track drawing state
         let activeTool = null; // Can be 'signature', 'text', 'date', 'checkbox'
         let isSidebarHidden = false;
         let isAuthenticated = false;
-
-        // Context for signature canvas
-        const signatureCtx = signatureCanvasEl.getContext('2d');
-        let rect = signatureCanvasEl.getBoundingClientRect();
-        signatureCanvasEl.width = rect.width;
-        signatureCanvasEl.height = rect.height;
+        let authMode = 'signup'; // 'signup' or 'login'
         
         // --- Authentication Logic ---
         function updateAuthUI() {
@@ -302,16 +391,22 @@
                 isAuthenticated = true;
                 const email = localStorage.getItem('userEmail');
                 authBtn.textContent = 'Logout';
+                authBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                authBtn.classList.add('bg-gray-200', 'text-gray-800', 'hover:bg-gray-300');
                 userStatusEl.classList.remove('hidden');
                 userEmailEl.textContent = email || 'Guest';
                 downloadPdfBtn.classList.remove('hidden');
                 saveToCloudBtn.classList.remove('hidden');
+                loginBtn.classList.add('hidden');
             } else {
                 isAuthenticated = false;
                 authBtn.textContent = 'Sign Up';
+                authBtn.classList.remove('bg-gray-200', 'text-gray-800', 'hover:bg-gray-300');
+                authBtn.classList.add('bg-blue-600', 'text-white', 'hover:bg-blue-700');
                 userStatusEl.classList.add('hidden');
                 downloadPdfBtn.classList.add('hidden');
                 saveToCloudBtn.classList.add('hidden');
+                loginBtn.classList.remove('hidden');
             }
         }
         
@@ -323,25 +418,54 @@
                 updateAuthUI();
                 showMessage('Logged out successfully.', 'info');
             } else {
-                // Show login/signup modal
+                // Show signup modal
+                authMode = 'signup';
+                authModalTitle.textContent = 'Sign Up for Free';
+                authModalText.textContent = 'Create an account to download and save your documents.';
+                authModalBtn.textContent = 'Sign Up';
+                authMessageEl.textContent = '';
                 authModal.classList.remove('hidden');
             }
+        });
+
+        loginBtn.addEventListener('click', () => {
+            authMode = 'login';
+            authModalTitle.textContent = 'Login to Your Account';
+            authModalText.textContent = 'Login to access your saved documents.';
+            authModalBtn.textContent = 'Login';
+            authMessageEl.textContent = '';
+            authModal.classList.remove('hidden');
         });
 
         authModalBtn.addEventListener('click', () => {
             const email = authEmailEl.value;
             const password = authPasswordEl.value;
-            if (email && password.length >= 6) {
-                // Simulate signup
-                localStorage.setItem('isAuthenticated', 'true');
-                localStorage.setItem('userEmail', email);
-                updateAuthUI();
-                authModal.classList.add('hidden');
-                authEmailEl.value = '';
-                authPasswordEl.value = '';
-                showMessage('Account created and logged in!', 'success');
-            } else {
-                authMessageEl.textContent = 'Please enter a valid email and a password of at least 6 characters.';
+            if (authMode === 'signup') {
+                if (email && password.length >= 6) {
+                    // Simulate signup
+                    localStorage.setItem('isAuthenticated', 'true');
+                    localStorage.setItem('userEmail', email);
+                    updateAuthUI();
+                    authModal.classList.add('hidden');
+                    authEmailEl.value = '';
+                    authPasswordEl.value = '';
+                    showMessage('Account created and logged in!', 'success');
+                } else {
+                    authMessageEl.textContent = 'Please enter a valid email and a password of at least 6 characters.';
+                }
+            } else if (authMode === 'login') {
+                const storedEmail = localStorage.getItem('userEmail');
+                if (email === storedEmail && password.length >= 6) {
+                    // Simulate login
+                    localStorage.setItem('isAuthenticated', 'true');
+                    updateAuthUI();
+                    authModal.classList.add('hidden');
+                    authEmailEl.value = '';
+                    authPasswordEl.value = '';
+                    showMessage('Logged in successfully!', 'success');
+                } else {
+                    authMessageEl.textContent = 'Invalid email or password.';
+                }
             }
         });
         
@@ -387,59 +511,80 @@
             }
         });
 
-        // --- Signature Pad Logic ---
-        function startDrawing(e) {
-            isDrawing = true;
-            signatureCtx.lineWidth = 3;
-            signatureCtx.lineCap = 'round';
-            signatureCtx.strokeStyle = 'black';
-            signatureCtx.beginPath();
-            signatureCtx.moveTo(e.offsetX, e.offsetY);
-        }
-        function draw(e) {
-            if (!isDrawing) return;
-            signatureCtx.lineTo(e.offsetX, e.offsetY);
-            signatureCtx.stroke();
-        }
-        function stopDrawing() {
-            if (!isDrawing) return;
-            isDrawing = false;
-            signatureCtx.closePath();
-            signatureDataUrl = signatureCanvasEl.toDataURL();
-            showMessage('Signature drawn!', 'success');
-        }
-        signatureCanvasEl.addEventListener('mousedown', startDrawing);
-        signatureCanvasEl.addEventListener('mousemove', draw);
-        signatureCanvasEl.addEventListener('mouseup', stopDrawing);
-        signatureCanvasEl.addEventListener('mouseout', stopDrawing);
-        signatureCanvasEl.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            const touch = e.touches[0];
-            const rect = signatureCanvasEl.getBoundingClientRect();
-            startDrawing({ offsetX: touch.clientX - rect.left, offsetY: touch.clientY - rect.top });
+        // --- Watermark Controls Logic ---
+        watermarkToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            watermarkControls.style.display = watermarkControls.style.display === 'block' ? 'none' : 'block';
         });
-        signatureCanvasEl.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            const touch = e.touches[0];
-            const rect = signatureCanvasEl.getBoundingClientRect();
-            draw({ offsetX: touch.clientX - rect.left, offsetY: touch.clientY - rect.top });
+        document.addEventListener('click', (e) => {
+            if (!watermarkToggleBtn.contains(e.target) && !watermarkControls.contains(e.target)) {
+                watermarkControls.style.display = 'none';
+            }
         });
-        signatureCanvasEl.addEventListener('touchend', stopDrawing);
-        clearSignatureBtn.addEventListener('click', () => {
-            signatureCtx.clearRect(0, 0, signatureCanvasEl.width, signatureCanvasEl.height);
-            signatureDataUrl = null;
-            showMessage('Signature cleared.', 'info');
+
+        addWatermarkBtn.addEventListener('click', async () => {
+            if (!pdfLibDoc) {
+                showMessage('Please upload a PDF first.', 'error');
+                return;
+            }
+            const watermarkText = watermarkTextEl.value;
+            if (!watermarkText) {
+                showMessage('Please enter watermark text.', 'warn');
+                return;
+            }
+            
+            showMessage('Adding watermark to PDF...', 'info');
+            const { degrees } = PDFLib;
+            const helveticaFont = await pdfLibDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+            const pagesToWatermark = pdfLibDoc.getPages();
+            const opacity = parseFloat(watermarkOpacityEl.value);
+
+            for (const page of pagesToWatermark) {
+                const { width, height } = page.getSize();
+                const textWidth = helveticaFont.widthOfTextAtSize(watermarkText, 50);
+                
+                page.drawText(watermarkText, {
+                    x: (width / 2) - (textWidth / 2),
+                    y: (height / 2),
+                    size: 50,
+                    font: helveticaFont,
+                    color: PDFLib.rgb(0.5, 0.5, 0.5),
+                    opacity: opacity,
+                    rotate: degrees(-45),
+                });
+            }
+            showMessage('Watermark added!', 'success');
         });
+
+        // --- Tools Dropdown Logic ---
+        toolsDropdownBtn.addEventListener('click', () => {
+            toolsDropdownMenu.classList.toggle('hidden');
+        });
+        document.addEventListener('click', (e) => {
+            if (!toolsDropdownBtn.contains(e.target) && !toolsDropdownMenu.contains(e.target)) {
+                toolsDropdownMenu.classList.add('hidden');
+            }
+        });
+
+        // --- Signature Upload Logic ---
         signatureFileEl.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
                 const reader = new FileReader();
-                reader.onload = (event) => {
+                reader.onload = async (event) => {
                     const img = new Image();
                     img.onload = () => {
-                        signatureCtx.clearRect(0, 0, signatureCanvasEl.width, signatureCanvasEl.height);
-                        signatureCtx.drawImage(img, 0, 0, signatureCanvasEl.width, signatureCanvasEl.height);
-                        signatureDataUrl = signatureCanvasEl.toDataURL();
+                        const tempCanvas = document.createElement('canvas');
+                        const ctx = tempCanvas.getContext('2d');
+                        tempCanvas.width = img.width;
+                        tempCanvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+                        signatureDataUrl = tempCanvas.toDataURL();
+                        
+                        // Update the signature preview in the sidebar
+                        signaturePreview.src = signatureDataUrl;
+                        signaturePreviewContainer.classList.remove('hidden');
+
                         showMessage('Signature uploaded!', 'success');
                     };
                     img.src = event.target.result;
@@ -454,9 +599,11 @@
                 pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
                 pdfLibDoc = await PDFLib.PDFDocument.load(pdfBytes);
                 pdfPagesEl.innerHTML = '';
+                miniPdfViewerEl.innerHTML = '';
                 pages = [];
 
                 for (let i = 1; i <= pdfDoc.numPages; i++) {
+                    // Render to main viewer
                     const page = await pdfDoc.getPage(i);
                     const viewport = page.getViewport({ scale: 1.5 });
                     const pageContainer = document.createElement('div');
@@ -476,6 +623,16 @@
                     
                     pages.push({ canvas: canvasEl, overlay: overlay, width: viewport.width, height: viewport.height, pageIndex: i - 1, pdfPage: page });
                     overlay.addEventListener('click', (e) => handleOverlayClick(e, pages[i - 1]));
+
+                    // Render to mini viewer
+                    const miniCanvas = document.createElement('canvas');
+                    miniCanvas.className = 'mini-pdf-page';
+                    const miniViewport = page.getViewport({ scale: 0.3 });
+                    miniCanvas.height = miniViewport.height;
+                    miniCanvas.width = miniViewport.width;
+                    const miniContext = miniCanvas.getContext('2d');
+                    await page.render({ canvasContext: miniContext, viewport: miniViewport }).promise;
+                    miniPdfViewerEl.appendChild(miniCanvas);
                 }
                 updateAuthUI(); // Update UI to show download/save buttons if signed in
                 showMessage('PDF loaded. Select a tool and click on a page to add content!', 'success');
@@ -508,7 +665,7 @@
             element.addEventListener('touchend', dragEnd);
             element.addEventListener('touchmove', drag);
             function dragStart(e) {
-                if (e.target.classList.contains('resizer')) { return; }
+                if (e.target.classList.contains('resizer') || e.target.classList.contains('delete-button')) { return; }
                 isDragging = true;
                 if (e.type === 'touchstart') {
                     initialX = e.touches[0].clientX - xOffset;
@@ -535,6 +692,18 @@
                 yOffset = currentY;
                 element.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
             }
+
+            // Add a delete button to the element
+            const deleteBtn = document.createElement('div');
+            deleteBtn.className = 'delete-button';
+            deleteBtn.textContent = '✕';
+            element.appendChild(deleteBtn);
+
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                element.remove();
+                showMessage('Element deleted.', 'info');
+            });
         }
         function makeResizable(element) {
             const resizer = document.createElement('div');
@@ -573,67 +742,37 @@
 
 
         // --- Tool Management & Placement Logic ---
-        addWatermarkBtn.addEventListener('click', async () => {
-            if (!pdfLibDoc) {
-                showMessage('Please upload a PDF first.', 'error');
-                return;
-            }
-            const watermarkText = watermarkTextEl.value;
-            if (!watermarkText) {
-                showMessage('Please enter watermark text.', 'warn');
-                return;
-            }
-            
-            showMessage('Adding watermark to PDF...', 'info');
-            const { degrees } = PDFLib;
-            const helveticaFont = await pdfLibDoc.embedFont(PDFLib.StandardFonts.Helvetica);
-            const pagesToWatermark = pdfLibDoc.getPages();
-            const opacity = parseFloat(watermarkOpacityEl.value);
-
-            for (const page of pagesToWatermark) {
-                const { width, height } = page.getSize();
-                const textWidth = helveticaFont.widthOfTextAtSize(watermarkText, 50);
-                
-                page.drawText(watermarkText, {
-                    x: (width / 2) - (textWidth / 2),
-                    y: (height / 2),
-                    size: 50,
-                    font: helveticaFont,
-                    color: PDFLib.rgb(0.5, 0.5, 0.5),
-                    opacity: opacity,
-                    rotate: degrees(-45),
-                });
-            }
-            showMessage('Watermark added!', 'success');
-        });
-
         addSignatureBtn.addEventListener('click', () => {
             if (!pdfLibDoc) { showMessage('Please upload a PDF first.', 'error'); return; }
-            if (!signatureDataUrl) { showMessage('Please draw or upload a signature first.', 'error'); return; }
+            if (!signatureDataUrl) { showMessage('Please upload a signature image first using the icon in the header.', 'error'); return; }
             activeTool = 'signature';
             showMessage('Signature tool selected. Click on a page to place it.');
+            toolsDropdownMenu.classList.add('hidden');
         });
         
         addTextBtn.addEventListener('click', () => {
             if (!pdfLibDoc) { showMessage('Please upload a PDF first.', 'error'); return; }
             activeTool = 'text';
             showMessage('Text tool selected. Click on a page to add text.');
+            toolsDropdownMenu.classList.add('hidden');
         });
         
         addDateBtn.addEventListener('click', () => {
             if (!pdfLibDoc) { showMessage('Please upload a PDF first.', 'error'); return; }
             activeTool = 'date';
             showMessage('Date tool selected. Click on a page to add the date.');
+            toolsDropdownMenu.classList.add('hidden');
         });
 
         addCheckboxBtn.addEventListener('click', () => {
             if (!pdfLibDoc) { showMessage('Please upload a PDF first.', 'error'); return; }
             activeTool = 'checkbox';
             showMessage('Checkbox tool selected. Click on a page to add a checkbox.');
+            toolsDropdownMenu.classList.add('hidden');
         });
 
         function handleOverlayClick(e, pageInfo) {
-            if (e.target.classList.contains('draggable-element') || e.target.classList.contains('resizer')) { return; }
+            if (e.target.classList.contains('draggable-element') || e.target.classList.contains('resizer') || e.target.classList.contains('delete-button')) { return; }
             if (!activeTool) { showMessage('Please select a tool first.', 'error'); return; }
             
             const clickX = e.clientX - pageInfo.overlay.getBoundingClientRect().left;
