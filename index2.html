@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Eco‑Online PDF Fillable Editor</title>
+  <style>
+    :root{
+      --bg:#0b1020; --panel:#111831; --ink:#e7ecff; --muted:#94a3b8; --accent:#7c5cff; --accent-2:#20c997;
+      --border:#263252; --danger:#ef4444; --ok:#22c55e;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(180deg,#0b1020,#0b152e);color:var(--ink);font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    .app{display:grid;grid-template-rows:auto 1fr; height:100%;}
+    .toolbar{display:flex;gap:.5rem;align-items:center;padding:.6rem .8rem;border-bottom:1px solid var(--border);background:rgba(17,24,49,.7);backdrop-filter: blur(6px);position:sticky;top:0;z-index:10}
+    .brand{display:flex;align-items:center;gap:.5rem;font-weight:700;letter-spacing:.2px}
+    .brand badg{padding:.2rem .45rem;background:var(--accent);border-radius:.4rem;margin-left:.25rem}
+    .toolbar .group{display:flex;gap:.4rem;align-items:center;background:#0f162f;border:1px solid var(--border);padding:.35rem;border-radius:.6rem}
+    .btn{border:1px solid var(--border);background:#0d1430;color:var(--ink);padding:.45rem .6rem;border-radius:.5rem;cursor:pointer}
+    .btn[data-active="true"], .btn:hover{border-color:var(--accent);box-shadow:0 0 0 2px rgba(124,92,255,.15) inset}
+    .btn.danger:hover{border-color:var(--danger);box-shadow:0 0 0 2px rgba(239,68,68,.15) inset}
+    input[type="file"]{display:none}
+    label.file{cursor:pointer}
+
+    .workspace{display:grid;grid-template-columns: 240px 1fr 300px; height:calc(100vh - 56px)}
+    .sidebar{border-right:1px solid var(--border);overflow:auto;background:#0c132b}
+    .thumb{position:relative;margin:.6rem;border:1px solid var(--border);border-radius:.5rem;overflow:hidden;cursor:pointer}
+    .thumb canvas{display:block;width:100%}
+    .thumb.active{outline:2px solid var(--accent)}
+
+    .stage-wrap{position:relative;overflow:auto;background:radial-gradient(1200px 600px at 50% -200px, rgba(124,92,255,.08), transparent 50%)}
+    .page{position:relative;margin:2rem auto;padding:0;box-shadow:0 12px 40px rgba(2,8,23,.55);border-radius:.5rem;background:white}
+    canvas.pageCanvas{display:block;border-radius:.5rem}
+    .overlay{position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none}
+
+    /* Elements placed on top */
+    .el{position:absolute; pointer-events:auto; border:1px dashed rgba(124,92,255,.9); border-radius:.25rem; background:transparent; resize:both; overflow:hidden}
+    .el.selected{box-shadow:0 0 0 2px rgba(124,92,255,.35)}
+    .textbox, .textarea{min-width:80px; min-height:26px; background:rgba(255,255,255,.9); color:#111; padding:6px 8px; overflow:auto}
+    .textbox[contenteditable="true"]:empty:before, .textarea[contenteditable="true"]:empty:before{content:attr(data-ph); color:#888}
+
+    .sig{background:transparent; border:1px dashed rgba(32,201,151,.9)}
+    .sig img{display:block; width:100%; height:100%; object-fit:contain; pointer-events:none}
+
+    .chk, .rad{display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.9); color:#111; min-width:20px; min-height:20px}
+    .chk-inner{width:70%; height:70%; border:2px solid #111}
+    .chk[data-checked="true"] .chk-inner{background:#111}
+    .rad-inner{width:70%; height:70%; border-radius:999px; border:2px solid #111}
+    .rad[data-checked="true"] .rad-inner{background:#111}
+
+    .drop{background:rgba(255,255,255,.9); color:#111; display:flex}
+    .drop select{flex:1; width:100%; height:100%; border:0; background:transparent; color:#111; padding:4px 6px}
+
+    .dragging{opacity:.85}
+
+    .zoom{margin-left:auto}
+
+    .context{position:fixed; display:none; flex-direction:column; background:#0c132b; border:1px solid var(--border); border-radius:.5rem; overflow:hidden; z-index:50}
+    .context button{all:unset; padding:.5rem .8rem; cursor:pointer}
+    .context button:hover{background:#101a3a}
+
+    /* Modal */
+    .modal{position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(3,6,23,.6); z-index:60}
+    .card{width:min(720px,94vw); background:#0c132b; border:1px solid var(--border); border-radius:1rem; padding:1rem}
+    .row{display:flex; gap:.6rem; align-items:center; flex-wrap:wrap}
+    .muted{color:var(--muted)}
+
+    .footer{display:flex; gap:.5rem; justify-content:flex-end; margin-top:.8rem}
+    .notice{font-size:12px; color:var(--muted)}
+
+    /* Right properties panel */
+    .propbar{border-left:1px solid var(--border); background:#0c132b; padding:10px; overflow:auto}
+    .propbar h3{margin:.4rem 0 .6rem 0}
+    .prop{display:flex; flex-direction:column; gap:.25rem; margin:.5rem 0}
+    .prop input[type="text"], .prop input[type="number"], .prop textarea{background:#0f162f; color:var(--ink); border:1px solid var(--border); border-radius:.5rem; padding:.45rem}
+    .pill{display:inline-flex; align-items:center; gap:.4rem; background:#0f162f; border:1px solid var(--border); padding:.2rem .5rem; border-radius:.5rem}
+    .status{margin-left:.5rem; font-size:12px; color:var(--muted)}
+    .hidden{display:none}
+  </style>
+  <!-- pdf-lib for writing/flattening/signatures/forms (kept as CDN) -->
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <div class="toolbar">
+    <div class="brand">Eco‑PDF <badg>Editor</badg></div>
+    <div class="group">
+      <label class="btn file">
+        <input id="file" type="file" accept="application/pdf" />Open PDF
+      </label>
+      <button id="saveBtn" class="btn">Download</button>
+      <button id="testBtn" class="btn" title="Run quick self‑tests">Run Tests</button>
+    </div>
+    <div class="group">
+      <button class="btn tool" data-tool="select" data-active="true">Select</button>
+      <button class="btn tool" data-tool="text">Text</button>
+      <button class="btn tool" data-tool="textarea">Text Area</button>
+      <button class="btn tool" data-tool="checkbox">Checkbox</button>
+      <button class="btn tool" data-tool="radio">Radio</button>
+      <button class="btn tool" data-tool="dropdown">Dropdown</button>
+      <button class="btn tool" data-tool="sig">Signature</button>
+    </div>
+    <div class="group">
+      <button id="delBtn" class="btn danger">Delete</button>
+      <button id="dupBtn" class="btn">Duplicate</button>
+    </div>
+    <div class="group zoom">
+      <button id="zoomOut" class="btn">−</button>
+      <span id="zoomLabel" style="min-width:3.5ch;text-align:center">100%</span>
+      <button id="zoomIn" class="btn">+</button>
+    </div>
+    <span id="libStatus" class="status">Loading PDF.js…</span>
+  </div>
+
+  <div class="workspace">
+    <aside class="sidebar" id="thumbs"></aside>
+    <main class="stage-wrap" id="stageWrap">
+      <div id="pages"></div>
+    </main>
+    <aside class="propbar" id="propbar">
+      <h3>Properties</h3>
+      <div id="noSel" class="muted">No field selected.</div>
+      <div id="props" class="hidden">
+        <div class="prop"><span class="pill">Type: <strong id="p_type"></strong></span></div>
+        <div class="prop"><label>Name<input id="p_name" type="text" placeholder="field.name"/></label></div>
+        <div class="prop"><label>Font size<input id="p_font" type="number" min="8" max="48" step="1"/></label></div>
+        <div class="prop" id="p_text_wrap"><label>Default text<textarea id="p_text" rows="3" placeholder="Default value"></textarea></label></div>
+        <div class="prop"><label><input id="p_multiline" type="checkbox"/> Multiline</label></div>
+        <div class="prop" id="p_checked_wrap"><label><input id="p_checked" type="checkbox"/> Checked / Selected</label></div>
+        <div class="prop" id="p_group_wrap"><label>Radio group<input id="p_group" type="text" placeholder="group.name"/></label></div>
+        <div class="prop" id="p_options_wrap"><label>Dropdown options (one per line)<textarea id="p_options" rows="5"></textarea></label></div>
+        <div class="prop"><div class="row" style="gap:.5rem"><label>W<input id="p_w" type="number" min="10" step="1" style="width:100px"/></label><label>H<input id="p_h" type="number" min="10" step="1" style="width:100px"/></label></div></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- Context Menu -->
+<div class="context" id="ctx">
+  <button data-action="dup">Duplicate</button>
+  <button data-action="delete" style="color:#fecaca">Delete</button>
+</div>
+
+<!-- Signature Modal -->
+<div class="modal" id="sigModal">
+  <div class="card">
+    <h3 style="margin:.2rem 0 .6rem">Create Signature</h3>
+    <div class="row" style="gap:1rem">
+      <div style="flex:1">
+        <div class="muted" style="margin-bottom:.4rem">Draw</div>
+        <canvas id="sigPad" width="600" height="160" style="background:#fff;border-radius:.6rem;display:block;width:100%"></canvas>
+        <div class="row" style="margin-top:.4rem">
+          <button class="btn" id="sigClear">Clear</button>
+        </div>
+      </div>
+      <div style="width:1px;background:var(--border);align-self:stretch"></div>
+      <div style="flex:1">
+        <div class="muted" style="margin-bottom:.4rem">Or upload</div>
+        <input id="sigFile" type="file" accept="image/*" />
+        <div class="notice" style="margin-top:.5rem">PNG with transparent background looks best.</div>
+      </div>
+    </div>
+    <div class="footer">
+      <button class="btn" id="sigCancel">Cancel</button>
+      <button class="btn" id="sigUse">Use Signature</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (s, r=document)=>r.querySelector(s);
+const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
+
+// --- Dynamic loader for PDF.js with multi-CDN fallback ---
+async function loadScript(src){
+  return new Promise((res, rej)=>{ const sc=document.createElement('script'); sc.src=src; sc.async=true; sc.onload=()=>res(); sc.onerror=()=>rej(new Error('Failed '+src)); document.head.appendChild(sc); });
+}
+async function ensurePdfJs(){
+  if(window.pdfjsLib){ return window.pdfjsLib; }
+  const bases=[
+    'https://unpkg.com/pdfjs-dist@4.6.82/',
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/',
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/'
+  ];
+  for(const base of bases){
+    try{
+      await loadScript(base+'build/pdf.min.js');
+      if(window.pdfjsLib){
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = base + 'build/pdf.worker.min.js';
+        $('#libStatus').textContent='PDF.js ready';
+        $('#libStatus').style.color='var(--ok)';
+        return window.pdfjsLib;
+      }
+    }catch(e){ /* try next */ }
+  }
+  $('#libStatus').textContent='PDF.js failed to load (offline/CSP?)';
+  $('#libStatus').style.color='var(--danger)';
+  throw new Error('PDF.js not loaded');
+}
+ensurePdfJs().catch(()=>{});
+
+let pdfDoc=null, pdfBytes=null, scale=1, curPage=1, overlays = new Map(); // pageNo -> [elements]
+let tool='select';
+let selected=null; // current selected overlay element DOM
+let signatureImageDataURL=null; // from modal
+
+function setTool(t){ tool=t; $$('.tool').forEach(b=>b.dataset.active=(b.dataset.tool===t)); }
+
+// File open
+$('#file').addEventListener('change', async (e)=>{
+  const file=e.target.files[0]; if(!file) return;
+  pdfBytes = await file.arrayBuffer();
+  try{ await ensurePdfJs(); }catch(err){ alert('Cannot render PDF pages because PDF.js did not load. You can still place fields and save, but no preview.'); }
+  if(window.pdfjsLib){ pdfDoc = await pdfjsLib.getDocument({data: pdfBytes}).promise; }
+  overlays.clear();
+  renderAll();
+});
+
+// Render all pages + thumbs
+async function renderAll(){
+  const pagesEl = $('#pages'); pagesEl.innerHTML='';
+  const thumbs = $('#thumbs'); thumbs.innerHTML='';
+  if(!pdfDoc){ // Show a drop area when no doc yet
+    const empty=document.createElement('div');
+    empty.style.cssText='margin:3rem auto; max-width:680px; text-align:center; color:var(--muted)';
+    empty.innerHTML='<h2>Open a PDF to start</h2><p>Use the Open button or drop a PDF file here.</p>';
+    pagesEl.appendChild(empty);
+    // enable drag-drop
+    ['dragover','drop'].forEach(evt=>pagesEl.addEventListener(evt,(e)=>{ e.preventDefault(); if(evt==='drop'){ const f=e.dataTransfer.files?.[0]; if(f && f.type==='application/pdf'){ const inp=$('#file'); inp.files=e.dataTransfer.files; inp.dispatchEvent(new Event('change')); } }}));
+    return;
+  }
+
+  for(let i=1;i<=pdfDoc.numPages;i++){
+    overlays.set(i, overlays.get(i)||[]);
+
+    const pageWrap = document.createElement('section');
+    pageWrap.className='page';
+
+    const overlay = document.createElement('div');
+    overlay.className='overlay';
+    overlay.dataset.page=i;
+    pageWrap.appendChild(overlay);
+
+    const canvas = document.createElement('canvas');
+    canvas.className='pageCanvas';
+    pageWrap.insertBefore(canvas, overlay);
+
+    const ctx = canvas.getContext('2d');
+
+    $('#pages').appendChild(pageWrap);
+
+    if(window.pdfjsLib){
+      const page = await pdfDoc.getPage(i);
+      const viewport = page.getViewport({scale});
+      pageWrap.style.width = viewport.width+ 'px';
+      pageWrap.style.height = viewport.height+ 'px';
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({canvasContext:ctx, viewport}).promise;
+
+      // thumbnail
+      const thumb = document.createElement('div'); thumb.className='thumb'; thumb.dataset.page=i;
+      const tCanvas = document.createElement('canvas');
+      const scaleT = 140/viewport.width; // width ~140px
+      tCanvas.width = viewport.width*scaleT; tCanvas.height = viewport.height*scaleT;
+      await page.render({canvasContext:tCanvas.getContext('2d'), viewport: page.getViewport({scale: scale*scaleT})}).promise;
+      thumb.appendChild(tCanvas);
+      thumb.addEventListener('click', ()=>scrollToPage(i));
+      $('#thumbs').appendChild(thumb);
+    }
+
+    // re-attach existing overlay elements if any
+    (overlays.get(i)||[]).forEach(el=>overlay.appendChild(el));
+  }
+  highlightThumb(1);
+  curPage=1;
+}
+
+function scrollToPage(n){
+  curPage=n; highlightThumb(n);
+  const page = $(`.page:nth-child(${n})`);
+  page?.scrollIntoView({behavior:'smooth', block:'center'});
+}
+function highlightThumb(n){
+  $$('.thumb').forEach(t=>t.classList.toggle('active', +t.dataset.page===n));
+}
+
+// Zoom
+$('#zoomIn').onclick=()=>setZoom(scale*1.1);
+$('#zoomOut').onclick=()=>setZoom(scale/1.1);
+function setZoom(s){
+  if(!pdfDoc) return; scale=Math.max(.5, Math.min(2.5, s));
+  $('#zoomLabel').textContent = Math.round(scale*100)+'%';
+  renderAll();
+}
+
+// Tool switching
+$$('.tool').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
+
+// Overlay interactions: double-click to create
+$('#pages').addEventListener('dblclick', (e)=>{
+  const overlay = e.target.closest('.overlay');
+  if(!overlay) return;
+  const { left, top } = overlay.getBoundingClientRect();
+  const x = e.clientX - left; const y = e.clientY - top;
+  let el=null;
+  if(tool==='text') el = createTextboxAt(overlay, x,y,false);
+  else if(tool==='textarea') el = createTextboxAt(overlay, x,y,true);
+  else if(tool==='sig') openSignatureModal((dataUrl)=>{ el=createSignatureAt(overlay,x,y,dataUrl); selectEl(el); });
+  else if(tool==='checkbox') el = createCheckboxAt(overlay,x,y);
+  else if(tool==='radio') el = createRadioAt(overlay,x,y);
+  else if(tool==='dropdown') el = createDropdownAt(overlay,x,y);
+  if(el) selectEl(el);
+});
+
+let fieldCounter=0;
+function nextName(prefix){ fieldCounter++; return prefix+fieldCounter; }
+
+function createTextboxAt(overlay, x,y, multiline){
+  const box=document.createElement('div');
+  box.className='el ' + (multiline? 'textarea':'textbox');
+  box.contentEditable='true';
+  box.dataset.ph= multiline? 'Type multi‑line…':'Type here';
+  box.style.left=(x)+'px';
+  box.style.top=(y)+'px';
+  box.style.width= multiline? '240px':'180px'; box.style.height= multiline? '90px':'30px';
+  box.dataset.type='text';
+  box.dataset.name=nextName('txt_');
+  box.dataset.multiline = multiline? 'true':'false';
+  box.dataset.fontSize='12';
+  overlay.appendChild(box);
+  registerElement(box);
+  return box;
+}
+function createSignatureAt(overlay, x,y, dataUrl){
+  const wrap=document.createElement('div');
+  wrap.className='el sig';
+  wrap.style.left=(x)+'px';
+  wrap.style.top=(y)+'px';
+  wrap.style.width='220px'; wrap.style.height='80px';
+  wrap.dataset.type='signature';
+  const img=new Image(); img.src=dataUrl; wrap.appendChild(img);
+  overlay.appendChild(wrap);
+  registerElement(wrap);
+  return wrap;
+}
+function createCheckboxAt(overlay,x,y){
+  const el=document.createElement('div');
+  el.className='el chk';
+  el.style.left=x+'px'; el.style.top=y+'px'; el.style.width='24px'; el.style.height='24px';
+  el.dataset.type='checkbox'; el.dataset.name=nextName('chk_'); el.dataset.checked='false';
+  const inner=document.createElement('div'); inner.className='chk-inner'; el.appendChild(inner);
+  overlay.appendChild(el); registerElement(el); return el;
+}
+function createRadioAt(overlay,x,y){
+  const el=document.createElement('div');
+  el.className='el rad';
+  el.style.left=x+'px'; el.style.top=y+'px'; el.style.width='24px'; el.style.height='24px';
+  el.dataset.type='radio'; el.dataset.name=nextName('rad_'); el.dataset.group='group1'; el.dataset.checked='false';
+  const inner=document.createElement('div'); inner.className='rad-inner'; el.appendChild(inner);
+  overlay.appendChild(el); registerElement(el); return el;
+}
+function createDropdownAt(overlay,x,y){
+  const el=document.createElement('div'); el.className='el drop'; el.style.left=x+'px'; el.style.top=y+'px'; el.style.width='180px'; el.style.height='32px';
+  el.dataset.type='dropdown'; el.dataset.name=nextName('dd_'); el.dataset.options=JSON.stringify(['Option 1','Option 2']); el.dataset.value='Option 1';
+  const sel=document.createElement('select');
+  for(const o of JSON.parse(el.dataset.options)){ const opt=document.createElement('option'); opt.value=o; opt.textContent=o; sel.appendChild(opt); }
+  sel.value=el.dataset.value;
+  el.appendChild(sel);
+  overlay.appendChild(el); registerElement(el); return el;
+}
+
+function registerElement(el){
+  const pageNo = +el.closest('.overlay').dataset.page;
+  overlays.set(pageNo, (overlays.get(pageNo)||[]));
+  overlays.get(pageNo).push(el);
+  enableDrag(el);
+  attachInteractive(el);
+}
+
+function attachInteractive(el){
+  // Select on click
+  el.addEventListener('click', (ev)=>{ selectEl(el); ev.stopPropagation(); });
+  // Context menu
+  el.addEventListener('contextmenu', (ev)=>{ ev.preventDefault(); selectEl(el); const m=$('#ctx'); m.style.display='flex'; m.style.left=ev.clientX+'px'; m.style.top=ev.clientY+'px'; });
+
+  if(el.classList.contains('chk')){
+    el.addEventListener('dblclick', ()=>{ el.dataset.checked = (el.dataset.checked!=='true').toString(); updatePropPanel(); });
+  }
+  if(el.classList.contains('rad')){
+    el.addEventListener('dblclick', ()=>{ setRadioChecked(el,true); updatePropPanel(); });
+  }
+  if(el.classList.contains('drop')){
+    const sel = el.querySelector('select');
+    sel.addEventListener('change', ()=>{ el.dataset.value = sel.value; updatePropPanel(); });
+  }
+}
+
+function setRadioChecked(el, val){
+  if(el.dataset.type!=='radio') return;
+  const page = +el.closest('.overlay').dataset.page;
+  overlays.get(page).filter(e=>e.dataset?.type==='radio' && e.dataset.group===el.dataset.group).forEach(e=>e.dataset.checked='false');
+  if(val) el.dataset.checked='true';
+}
+
+function enableDrag(el){
+  let sx,sy,sl,st, dragging=false;
+  el.addEventListener('pointerdown',(ev)=>{
+    if(tool!=='select') return; 
+    if(ev.button!==0) return; // left only
+    dragging=true; el.setPointerCapture(ev.pointerId);
+    el.classList.add('dragging');
+    sx=ev.clientX; sy=ev.clientY; sl=el.offsetLeft; st=el.offsetTop;
+    selectEl(el);
+  });
+  el.addEventListener('pointermove',(ev)=>{
+    if(!dragging) return;
+    const dx=ev.clientX-sx, dy=ev.clientY-sy;
+    el.style.left = (sl+dx)+'px';
+    el.style.top = (st+dy)+'px';
+  });
+  el.addEventListener('pointerup', (ev)=>{ dragging=false; el.classList.remove('dragging'); try{el.releasePointerCapture(ev.pointerId);}catch{} });
+}
+
+// Canvas deselect & hide context
+window.addEventListener('click', ()=>{ $('#ctx').style.display='none'; });
+$('#pages').addEventListener('click', (e)=>{ const onEl = e.target.closest('.el'); if(!onEl) selectEl(null); });
+
+function selectEl(el){
+  if(selected) selected.classList.remove('selected');
+  selected=el; if(selected) selected.classList.add('selected');
+  updatePropPanel();
+}
+
+// Context actions
+$('#ctx').addEventListener('click', (e)=>{
+  const a=e.target.dataset.action; if(!a||!selected) return;
+  if(a==='delete') deleteSelected();
+  if(a==='dup') duplicateSelected();
+  $('#ctx').style.display='none';
+});
+$('#delBtn').onclick=deleteSelected; $('#dupBtn').onclick=duplicateSelected;
+function deleteSelected(){ if(!selected) return; const pageEls=overlays.get(+selected.closest('.overlay').dataset.page); const idx=pageEls.indexOf(selected); if(idx>-1) pageEls.splice(idx,1); selected.remove(); selected=null; updatePropPanel(); }
+function duplicateSelected(){ if(!selected) return; const clone=selected.cloneNode(true); selected.after(clone); registerElement(clone); selectEl(clone); }
+
+// Signature modal & pad
+function openSignatureModal(cb){
+  const modal=$('#sigModal'); modal.style.display='flex';
+  const pad=$('#sigPad'); const ctx=pad.getContext('2d'); ctx.lineWidth=2; ctx.lineCap='round';
+  let drawing=false, px=0,py=0; ctx.clearRect(0,0,pad.width,pad.height);
+  const pos=(e)=>{ const r=pad.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; };
+  pad.onpointerdown=(e)=>{ drawing=true; const p=pos(e); px=p.x; py=p.y; };
+  pad.onpointermove=(e)=>{ if(!drawing) return; const p=pos(e); ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(p.x,p.y); ctx.stroke(); px=p.x; py=p.y; };
+  window.onpointerup=()=>{ drawing=false; };
+  $('#sigClear').onclick=()=>ctx.clearRect(0,0,pad.width,pad.height);
+
+  $('#sigUse').onclick=()=>{ signatureImageDataURL = pad.toDataURL('image/png'); if($('#sigFile').files[0]){ const fr=new FileReader(); fr.onload=()=>{ signatureImageDataURL=fr.result; cb(signatureImageDataURL); modal.style.display='none'; }; fr.readAsDataURL($('#sigFile').files[0]); } else { cb(signatureImageDataURL); modal.style.display='none'; } };
+  $('#sigCancel').onclick=()=>{ modal.style.display='none'; };
+}
+
+// --- Properties panel logic ---
+function updatePropPanel(){
+  const no=$('#noSel'), p=$('#props');
+  if(!selected){ no.classList.remove('hidden'); p.classList.add('hidden'); return; }
+  no.classList.add('hidden'); p.classList.remove('hidden');
+  $('#p_type').textContent = selected.dataset.type || (selected.classList.contains('sig')? 'signature':'text');
+  $('#p_name').value = selected.dataset.name || '';
+  $('#p_w').value = Math.round(selected.getBoundingClientRect().width);
+  $('#p_h').value = Math.round(selected.getBoundingClientRect().height);
+
+  const isText = ['text'].includes(selected.dataset.type);
+  const isDrop = selected.dataset.type==='dropdown';
+  const isChk = selected.dataset.type==='checkbox';
+  const isRad = selected.dataset.type==='radio';
+
+  // Show/hide property groups
+  $('#p_text_wrap').style.display = (isText? 'block':'none');
+  $('#p_multiline').checked = (selected.dataset.multiline==='true');
+  $('#p_checked_wrap').style.display = (isChk||isRad? 'block':'none');
+  $('#p_checked').checked = (selected.dataset.checked==='true');
+  $('#p_group_wrap').style.display = (isRad? 'block':'none');
+  $('#p_group').value = selected.dataset.group||'';
+  $('#p_font').value = +selected.dataset.fontSize || 12;
+  $('#p_options_wrap').style.display = (isDrop? 'block':'none');
+  if(isDrop){ $('#p_options').value = JSON.parse(selected.dataset.options||'[]').join('\n'); }
+  if(isText){ $('#p_text').value = selected.textContent.trim(); }
+}
+
+$('#p_name').addEventListener('input', ()=>{ if(selected){ selected.dataset.name=$('#p_name').value; }});
+$('#p_w').addEventListener('input', ()=>{ if(selected){ selected.style.width=$('#p_w').value+'px'; }});
+$('#p_h').addEventListener('input', ()=>{ if(selected){ selected.style.height=$('#p_h').value+'px'; }});
+$('#p_multiline').addEventListener('change', ()=>{ if(!selected) return; const v=$('#p_multiline').checked; selected.dataset.multiline=v?'true':'false'; selected.classList.toggle('textarea', v); selected.classList.toggle('textbox', !v); });
+$('#p_checked').addEventListener('change', ()=>{ if(!selected) return; const v=$('#p_checked').checked; if(selected.dataset.type==='radio'){ setRadioChecked(selected, v); } else { selected.dataset.checked = v?'true':'false'; } });
+$('#p_group').addEventListener('input', ()=>{ if(selected && selected.dataset.type==='radio'){ selected.dataset.group=$('#p_group').value||'group1'; }});
+$('#p_font').addEventListener('input', ()=>{ if(!selected) return; selected.dataset.fontSize = $('#p_font').value; selected.style.fontSize = $('#p_font').value+'px'; });
+$('#p_text').addEventListener('input', ()=>{ if(!selected) return; selected.textContent = $('#p_text').value; });
+$('#p_options').addEventListener('input', ()=>{ if(!selected||selected.dataset.type!=='dropdown') return; const opts=$('#p_options').value.split(/\n+/).map(s=>s.trim()).filter(Boolean); selected.dataset.options=JSON.stringify(opts); const sel=selected.querySelector('select'); sel.innerHTML=''; for(const o of opts){ const opt=document.createElement('option'); opt.value=o; opt.textContent=o; sel.appendChild(opt); } sel.value = opts[0]||''; selected.dataset.value = sel.value; });
+
+// Save/Download: create real PDF form fields when possible; fallback to appearance when API not available
+$('#saveBtn').addEventListener('click', async ()=>{
+  if(!pdfBytes){ alert('Open a PDF first.'); return; }
+  const pdf = await PDFLib.PDFDocument.load(pdfBytes);
+  const form = pdf.getForm();
+  const radioGroups = new Map();
+
+  for(let i=1;i<= (pdf.getPageCount ? pdf.getPageCount() : pdf.getPages().length); i++){
+    const page = pdf.getPage(i-1);
+    const pageWrap = $(`.page:nth-child(${i})`);
+    const overlay = pageWrap?.querySelector('.overlay');
+    const overlayRect = overlay?.getBoundingClientRect();
+    const pageEls = overlays.get(i) || [];
+    for(const el of pageEls){
+      const rect = el.getBoundingClientRect();
+      const x = rect.left - overlayRect.left;
+      const y = rect.top - overlayRect.top;
+      const w = rect.width; const h = rect.height;
+      const pdfX = x/scale;
+      const pdfY = (overlayRect.height - (y+h))/scale;
+      const pdfW = w/scale; const pdfH = h/scale;
+
+      const type = el.dataset.type || (el.classList.contains('sig')? 'signature':'text');
+      const name = el.dataset.name || `${type}_${i}_${Math.round(pdfX)}_${Math.round(pdfY)}`;
+
+      try{
+        if(type==='text'){
+          const tf = form.createTextField(name);
+          // Multiline & font size if supported
+          try{ if(el.dataset.multiline==='true' && tf.enableMultiline) tf.enableMultiline(); }catch{}
+          try{ if(el.dataset.fontSize) tf.setFontSize(Number(el.dataset.fontSize)); }catch{}
+          tf.setText((el.textContent||'').trim());
+          tf.addToPage(page, { x: pdfX, y: pdfY, width: pdfW, height: pdfH });
+        } else if(type==='checkbox'){
+          const cb = (form.createCheckBox? form.createCheckBox(name) : form.createCheckBox?.(name));
+          if(cb){
+            if(cb.addToPage) cb.addToPage(page,{x:pdfX,y:pdfY,width:pdfW,height:pdfH});
+            if(el.dataset.checked==='true'){
+              try{ cb.check? cb.check(): (cb.setChecked && cb.setChecked(true)); }catch{}
+            } else { try{ cb.uncheck && cb.uncheck(); }catch{} }
+          } else {
+            // Fallback appearance
+            page.drawRectangle({x:pdfX,y:pdfY,width:pdfW,height:pdfH,borderColor:PDFLib.rgb(0,0,0), borderWidth:1});
+            if(el.dataset.checked==='true') page.drawRectangle({x:pdfX+2,y:pdfY+2,width:pdfW-4,height:pdfH-4,color:PDFLib.rgb(0,0,0)});
+          }
+        } else if(type==='radio'){
+          const groupName = el.dataset.group || 'group1';
+          let rg = radioGroups.get(groupName);
+          if(!rg){ rg = form.createRadioGroup(groupName); radioGroups.set(groupName, rg); }
+          const opt = `${name}_opt`;
+          if(rg.addOptionToGroup){ rg.addOptionToGroup(opt, { x: pdfX, y: pdfY, width: pdfW, height: pdfH }); }
+          else if(rg.addOption){ rg.addOption(opt, { x: pdfX, y: pdfY, width: pdfW, height: pdfH }); }
+          if(el.dataset.checked==='true'){
+            try{ rg.select(opt); }catch{}
+          }
+        } else if(type==='dropdown'){
+          const dd = form.createDropdown(name);
+          const opts = JSON.parse(el.dataset.options||'[]');
+          if(dd.addOptions) dd.addOptions(opts);
+          try{ if(el.dataset.value) dd.select(el.dataset.value); }catch{}
+          dd.addToPage(page,{x:pdfX,y:pdfY,width:pdfW,height:pdfH});
+        } else if(type==='signature'){
+          const png = await pdf.embedPng(el.querySelector('img').src);
+          page.drawImage(png, { x: pdfX, y: pdfY, width: pdfW, height: pdfH });
+        }
+      }catch(err){
+        // Fallback drawing when form API call fails
+        try{
+          if(type==='text'){
+            page.drawRectangle({x:pdfX,y:pdfY,width:pdfW,height:pdfH,borderColor:PDFLib.rgb(0,0,0), borderWidth:1});
+            page.drawText((el.textContent||'').trim(), {x:pdfX+2,y:pdfY+pdfH-12,size:12});
+          } else if(type==='radio'){
+            page.drawCircle({x:pdfX+pdfW/2, y:pdfY+pdfH/2, size:Math.min(pdfW,pdfH)/2, borderColor:PDFLib.rgb(0,0,0), borderWidth:1});
+            if(el.dataset.checked==='true') page.drawCircle({x:pdfX+pdfW/2, y:pdfY+pdfH/2, size:Math.min(pdfW,pdfH)/3, color:PDFLib.rgb(0,0,0)});
+          } else if(type==='dropdown'){
+            page.drawRectangle({x:pdfX,y:pdfY,width:pdfW,height:pdfH,borderColor:PDFLib.rgb(0,0,0), borderWidth:1});
+            page.drawText((el.dataset.value||''), {x:pdfX+4,y:pdfY+pdfH-12,size:12});
+          }
+        }catch{}
+        console.warn('Form field fallback for', type, err);
+      }
+    }
+  }
+
+  const out = await pdf.save({ updateFieldAppearances: true });
+  downloadBlob(new Blob([out], {type:'application/pdf'}), 'eco-edited.pdf');
+});
+
+function downloadBlob(blob, filename){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1500);
+}
+
+// Keyboard shortcuts
+window.addEventListener('keydown', (e)=>{
+  if(e.key==='Delete' || e.key==='Backspace'){ if(selected){ e.preventDefault(); deleteSelected(); }}
+  if((e.ctrlKey||e.metaKey) && e.key==='d'){ e.preventDefault(); duplicateSelected(); }
+});
+
+// --- Self Tests (basic) ---
+$('#testBtn').addEventListener('click', async ()=>{
+  const results=[];
+  try{ await ensurePdfJs(); results.push('PDF.js loaded ✅'); }catch{ results.push('PDF.js failed ❌'); }
+  try{
+    const pdf = await PDFLib.PDFDocument.create();
+    const page = pdf.addPage([300,200]);
+    const form = pdf.getForm();
+    const tf = form.createTextField('t1'); tf.setText('Hello'); tf.addToPage(page,{x:20,y:150,width:120,height:20});
+    const cb = form.createCheckBox('c1'); cb.addToPage(page,{x:20,y:120,width:15,height:15}); try{cb.check();}catch{}
+    const rg = form.createRadioGroup('g1'); if(rg.addOptionToGroup){ rg.addOptionToGroup('o1',{x:20,y:90,width:15,height:15}); rg.addOptionToGroup('o2',{x:40,y:90,width:15,height:15}); rg.select('o2'); }
+    const dd = form.createDropdown('d1'); dd.addOptions(['One','Two']); dd.select('Two'); dd.addToPage(page,{x:20,y:50,width:120,height:20});
+    await pdf.save();
+    results.push('pdf-lib forms OK ✅');
+  }catch(e){ results.push('pdf-lib forms threw ❌: '+e.message); }
+  alert(results.join('\n'));
+});
+</script>
+</body>
+</html>
